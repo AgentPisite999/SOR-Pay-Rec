@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>SOR Portal · Inc.5 Shoes</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/css/style.css" />
+</head>
+<body>
+
+  <!-- ─── TOPBAR ─── -->
+  <header class="topbar">
+    <div class="top-left">
+      <button class="menu-btn" id="btnNav" aria-label="Toggle menu">
+        <span></span><span></span><span></span>
+      </button>
+
+      <a class="logo" href="/">
+        <span class="logo-inc">Inc</span><span class="logo-dot5">.5</span>
+      </a>
+
+      <div class="top-divider"></div>
+
+      <div class="top-brand">
+        <div class="top-brand-title">SOR Payables &amp; Receivables</div>
+        <div class="top-brand-sub">AI Automation Portal</div>
+      </div>
+    </div>
+
+    <div class="top-right">
+      <!-- Console running indicator (shown when agent is running) -->
+      <div class="run-indicator" id="runIndicator" style="display:none">
+        <div class="run-dot"></div>
+        <span class="run-label">Agent running...</span>
+      </div>
+
+      <div class="status-pill">
+        <span class="status-dot"></span>
+        <span class="status-label">System Online</span>
+      </div>
+
+      <div class="user-chip" id="userChip">
+        <div class="user-avatar" id="userAvatar">U</div>
+        <div class="user-info">
+          <div class="user-name" id="userName">Inc.5 Agent</div>
+          <div class="user-email" id="userEmail">—</div>
+        </div>
+      </div>
+
+      <form method="post" action="/auth/logout" style="margin:0">
+        <button class="logout-btn" type="submit">
+          <span>Sign out</span>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+        </button>
+      </form>
+    </div>
+  </header>
+
+  <!-- ─── APP SHELL ─── -->
+  <div class="app-shell">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar" id="sidebar">
+      <nav class="sb-nav">
+        <div class="sb-section-label">Navigation</div>
+
+        <button class="sb-item active" data-page="console" type="button">
+          <span class="sb-item-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M6 8l4 4-4 4"/><path d="M14 16h4"/></svg>
+          </span>
+          <span class="sb-item-label">Console</span>
+          <span class="sb-item-tag" id="consoleRunTag" style="display:none">●&nbsp;Live</span>
+          <span class="sb-item-tag" id="consoleRunTagStatic">Run</span>
+        </button>
+
+        <button class="sb-item" data-page="report" type="button">
+          <span class="sb-item-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+          </span>
+          <span class="sb-item-label">Reports</span>
+        </button>
+
+        <button class="sb-item" data-page="analytics" type="button">
+          <span class="sb-item-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+          </span>
+          <span class="sb-item-label">Analytics</span>
+          <span class="sb-item-tag soon">Soon</span>
+        </button>
+
+        <button class="sb-item" data-page="help" type="button">
+          <span class="sb-item-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </span>
+          <span class="sb-item-label">Help &amp; Format</span>
+          <span class="sb-item-tag soon">Soon</span>
+        </button>
+      </nav>
+
+      <div class="sb-footer">
+        <div class="sb-footer-label">Active Agents</div>
+        <div class="sb-agents">
+          <div class="sb-agent">PAY-STK</div>
+          <div class="sb-agent">PAY-TD</div>
+          <div class="sb-agent">REC-STK</div>
+          <div class="sb-agent">REC-TD</div>
+          <div class="sb-agent">PRI-SALE</div>
+        </div>
+        <div class="sb-version">SOR Portal · v2.1</div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main-area" id="main">
+      <div class="page-loader" id="pageLoader">
+        <div class="loader-ring"></div>
+        <div class="loader-text">Initialising...</div>
+      </div>
+    </main>
+  </div>
+
+  <!-- OVERLAY (mobile) -->
+  <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+  <!-- TOAST -->
+  <div class="toast" id="toast"></div>
+
+  <script src="/js/app.js"></script>
+  <script src="/js/report.js"></script>
+  <script src="/js/sections.js"></script>
+
+  <script>
+    // ─── Mobile sidebar toggle ───
+    (function () {
+      const btn     = document.getElementById("btnNav");
+      const sidebar = document.getElementById("sidebar");
+      const overlay = document.getElementById("sidebarOverlay");
+      if (!btn || !sidebar) return;
+
+      function toggle(open) {
+        sidebar.classList.toggle("open", open);
+        overlay.classList.toggle("active", open);
+        document.body.classList.toggle("sidebar-open", open);
+      }
+
+      btn.addEventListener("click", () => toggle(!sidebar.classList.contains("open")));
+      overlay.addEventListener("click", () => toggle(false));
+      document.addEventListener("click", (e) => {
+        if (e.target.closest(".sb-item")) toggle(false);
+      });
+      document.addEventListener("keydown", (e) => {
+        if (e.key === "Escape") toggle(false);
+      });
+    })();
+
+    // ─── Console run indicator (survives tab switching) ───
+    // app.js sets window.__consoleRunning = true/false
+    // This polls and updates the indicator
+    (function () {
+      const indicator  = document.getElementById("runIndicator");
+      const liveTag    = document.getElementById("consoleRunTag");
+      const staticTag  = document.getElementById("consoleRunTagStatic");
+
+      setInterval(() => {
+        const running = Boolean(window.__consoleRunning);
+        if (indicator) indicator.style.display = running ? "flex" : "none";
+        if (liveTag)   liveTag.style.display   = running ? ""     : "none";
+        if (staticTag) staticTag.style.display  = running ? "none" : "";
+      }, 500);
+    })();
+  </script>
+
+  <style>
+    /* Run indicator in topbar */
+    .run-indicator {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 12px;
+      border-radius: 99px;
+      border: 1px solid rgba(232,168,48,0.3);
+      background: rgba(232,168,48,0.07);
+      animation: fadeIn 0.3s ease;
+    }
+    .run-dot {
+      width: 7px; height: 7px;
+      border-radius: 50%;
+      background: var(--amber, #E8A830);
+      animation: pulse-amber 1.2s ease infinite;
+    }
+    .run-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      color: var(--amber, #E8A830);
+      letter-spacing: 0.08em;
+    }
+    @keyframes pulse-amber {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.3; }
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+
+    /* Live tag in sidebar */
+    .sb-item-tag:not(.soon) {
+      color: var(--amber, #E8A830);
+      border-color: rgba(232,168,48,0.3);
+      background: rgba(232,168,48,0.07);
+    }
+  </style>
+
+</body>
+</html>

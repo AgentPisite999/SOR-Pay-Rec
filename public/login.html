@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Inc.5 Shoes · SOR Portal</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
+
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --black: #080808;
+  --dark: #0f0f0f;
+  --panel: #141414;
+  --border: rgba(255,255,255,0.07);
+  --border-bright: rgba(255,255,255,0.14);
+  --amber: #E8A830;
+  --amber-dim: rgba(232,168,48,0.18);
+  --amber-glow: rgba(232,168,48,0.08);
+  --text: #F0EDE8;
+  --text-muted: rgba(240,237,232,0.45);
+  --text-sub: rgba(240,237,232,0.28);
+  --green: #4ADE80;
+}
+
+html, body { height: 100%; }
+
+body {
+  font-family: 'Syne', sans-serif;
+  background: var(--black);
+  color: var(--text);
+  overflow: hidden;
+}
+
+/* ─── BACKGROUND ─── */
+.bg {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.bg-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
+  background-size: 80px 80px;
+  mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 20%, transparent 100%);
+}
+
+.bg-glow-1 {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  top: -200px;
+  left: -100px;
+  background: radial-gradient(circle, rgba(232,168,48,0.07) 0%, transparent 65%);
+  filter: blur(1px);
+}
+
+.bg-glow-2 {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  bottom: -150px;
+  right: -100px;
+  background: radial-gradient(circle, rgba(232,168,48,0.05) 0%, transparent 65%);
+}
+
+.bg-line {
+  position: absolute;
+  top: 0; bottom: 0;
+  left: 50%;
+  width: 1px;
+  background: linear-gradient(180deg, transparent, rgba(232,168,48,0.12) 30%, rgba(232,168,48,0.12) 70%, transparent);
+}
+
+/* ─── LAYOUT ─── */
+.shell {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  height: 100vh;
+}
+
+/* ─── LEFT PANEL ─── */
+.left {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: clamp(32px, 5vw, 72px);
+  border-right: 1px solid var(--border);
+  position: relative;
+  overflow: hidden;
+}
+
+.left-top {}
+
+.wordmark {
+  display: flex;
+  align-items: flex-end;
+  gap: 0;
+  line-height: 1;
+  animation: fadeUp 0.6s ease both;
+}
+
+.wordmark-inc {
+  font-family: 'Instrument Serif', serif;
+  font-style: italic;
+  font-size: clamp(72px, 8vw, 120px);
+  color: var(--text);
+  letter-spacing: -2px;
+}
+
+.wordmark-dot5 {
+  font-family: 'Syne', sans-serif;
+  font-weight: 800;
+  font-size: clamp(36px, 4vw, 60px);
+  color: var(--amber);
+  letter-spacing: -1px;
+  padding-bottom: 8px;
+}
+
+.tagline {
+  margin-top: 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  animation: fadeUp 0.6s 0.1s ease both;
+}
+
+.divider-line {
+  width: 48px;
+  height: 2px;
+  background: var(--amber);
+  margin: 32px 0;
+  animation: expandW 0.8s 0.2s ease both;
+}
+
+@keyframes expandW {
+  from { width: 0; opacity: 0; }
+  to { width: 48px; opacity: 1; }
+}
+
+.descriptor {
+  max-width: 420px;
+  font-size: clamp(28px, 3vw, 42px);
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: -0.5px;
+  animation: fadeUp 0.6s 0.2s ease both;
+}
+
+.descriptor em {
+  font-style: normal;
+  color: var(--amber);
+}
+
+/* Feature list */
+.features {
+  margin-top: 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: fadeUp 0.6s 0.3s ease both;
+}
+
+.feat {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+  font-family: 'JetBrains Mono', monospace;
+}
+
+.feat-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--amber);
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+/* Bottom ticker */
+.ticker {
+  animation: fadeUp 0.6s 0.4s ease both;
+}
+
+.ticker-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--text-sub);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+
+.ticker-items {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.ticker-item {
+  padding: 6px 12px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--text-muted);
+  background: rgba(255,255,255,0.02);
+}
+
+.ticker-item.active {
+  border-color: rgba(232,168,48,0.35);
+  color: var(--amber);
+  background: var(--amber-glow);
+}
+
+/* Decorative corner mark */
+.corner-mark {
+  position: absolute;
+  bottom: 40px;
+  right: 40px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-sub);
+  letter-spacing: 0.15em;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
+/* ─── RIGHT PANEL ─── */
+.right {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: clamp(24px, 5vw, 72px);
+  background: var(--dark);
+}
+
+.card {
+  width: min(420px, 90vw);
+  animation: fadeUp 0.5s 0.15s ease both;
+}
+
+.card-eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.2em;
+  color: var(--text-sub);
+  text-transform: uppercase;
+  margin-bottom: 28px;
+}
+
+.card-eyebrow::before {
+  content: '';
+  display: block;
+  width: 24px;
+  height: 1px;
+  background: var(--amber);
+  opacity: 0.6;
+}
+
+.card-title {
+  font-size: 32px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  margin-bottom: 8px;
+}
+
+.card-sub {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 36px;
+}
+
+/* Google Button */
+.google-btn {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 16px 20px;
+  background: var(--panel);
+  border: 1px solid var(--border-bright);
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--text);
+  font-family: 'Syne', sans-serif;
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: 0.01em;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+.google-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, rgba(232,168,48,0.06), transparent 50%);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.google-btn:hover {
+  border-color: rgba(232,168,48,0.4);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 0 0 1px rgba(232,168,48,0.12);
+}
+
+.google-btn:hover::before { opacity: 1; }
+
+.google-btn:active { transform: translateY(0); }
+
+.g-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.g-icon svg {
+  width: 18px;
+  height: 18px;
+}
+
+.btn-arrow {
+  margin-left: auto;
+  color: var(--text-sub);
+  transition: transform 0.2s, color 0.2s;
+}
+
+.google-btn:hover .btn-arrow {
+  transform: translateX(3px);
+  color: var(--amber);
+}
+
+/* Separator */
+.card-sep {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin: 28px 0;
+}
+
+.card-sep::before, .card-sep::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.card-sep span {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-sub);
+  letter-spacing: 0.1em;
+}
+
+/* Info block */
+.info-block {
+  padding: 16px;
+  background: var(--amber-glow);
+  border: 1px solid rgba(232,168,48,0.15);
+  border-radius: 8px;
+}
+
+.info-block p {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: rgba(232,168,48,0.8);
+  line-height: 1.6;
+}
+
+.info-block strong { color: var(--amber); font-weight: 500; }
+
+/* Error block */
+.err-block {
+  display: none;
+  margin-top: 20px;
+  padding: 14px 16px;
+  background: rgba(251,113,133,0.08);
+  border: 1px solid rgba(251,113,133,0.25);
+  border-radius: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: rgba(251,113,133,0.9);
+  line-height: 1.6;
+}
+
+/* Footer note */
+.card-footer {
+  margin-top: 24px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-sub);
+  text-align: center;
+  line-height: 1.6;
+}
+
+/* Animations */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── MOBILE ─── */
+@media (max-width: 880px) {
+  body { overflow: auto; }
+  .shell { grid-template-columns: 1fr; height: auto; min-height: 100vh; }
+  .left { display: none; }
+  .right { min-height: 100vh; padding: 32px 20px; }
+  .bg-line { display: none; }
+}
+</style>
+</head>
+<body>
+
+<div class="bg">
+  <div class="bg-grid"></div>
+  <div class="bg-glow-1"></div>
+  <div class="bg-glow-2"></div>
+  <div class="bg-line"></div>
+</div>
+
+<div class="shell">
+  <!-- LEFT -->
+  <section class="left">
+    <div class="left-top">
+      <div class="wordmark">
+        <span class="wordmark-inc">Inc</span>
+        <span class="wordmark-dot5">.5</span>
+      </div>
+      <div class="tagline">Shoes · Bags · Accessories · Attitude</div>
+
+      <div class="divider-line"></div>
+
+      <div class="descriptor">
+        Intelligent automation for<br><em>Payables &amp; Receivables</em>
+      </div>
+
+      <div class="features">
+        <div class="feat"><div class="feat-dot"></div> AI-powered SOR processing pipeline</div>
+        <div class="feat"><div class="feat-dot"></div> Google Drive output delivery</div>
+        <div class="feat"><div class="feat-dot"></div> Real-time run logs &amp; progress tracking</div>
+        <div class="feat"><div class="feat-dot"></div> Restricted to authorized domain only</div>
+      </div>
+    </div>
+
+    <div class="ticker">
+      <div class="ticker-label">Active agents</div>
+      <div class="ticker-items">
+        <div class="ticker-item active">Payable STK</div>
+        <div class="ticker-item active">Payable TD</div>
+        <div class="ticker-item active">Rec STK</div>
+        <div class="ticker-item active">Rec TD</div>
+        <div class="ticker-item active">Primary Sale</div>
+      </div>
+    </div>
+
+    <div class="corner-mark">SOR · AI · 2026</div>
+  </section>
+
+  <!-- RIGHT -->
+  <section class="right">
+    <div class="card">
+      <div class="card-eyebrow">Secure Portal Access</div>
+
+      <h1 class="card-title">Sign in to<br>your workspace</h1>
+      <p class="card-sub">Use your Inc.5 company Google account.<br>Unauthorized domains will be rejected.</p>
+
+      <a href="/auth/google" class="google-btn">
+        <span class="g-icon">
+          <svg viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M17.64 9.205c0-.639-.057-1.252-.164-1.841H9v3.481h4.844a4.14 4.14 0 01-1.796 2.716v2.259h2.908c1.702-1.567 2.684-3.875 2.684-6.615z" fill="#4285F4"/>
+            <path d="M9 18c2.43 0 4.467-.806 5.956-2.18l-2.908-2.259c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 009 18z" fill="#34A853"/>
+            <path d="M3.964 10.71A5.41 5.41 0 013.682 9c0-.593.102-1.17.282-1.71V4.958H.957A8.996 8.996 0 000 9c0 1.452.348 2.827.957 4.042l3.007-2.332z" fill="#FBBC05"/>
+            <path d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 00.957 4.958L3.964 6.29C4.672 4.163 6.656 3.58 9 3.58z" fill="#EA4335"/>
+          </svg>
+        </span>
+        <span>Continue with Google</span>
+        <span class="btn-arrow">→</span>
+      </a>
+
+      <div class="card-sep"><span>note</span></div>
+
+      <div class="info-block">
+        <p>If you see <strong>"restricted to test users"</strong>, add your email in OAuth consent screen → <strong>Test users</strong> in Google Cloud Console.</p>
+      </div>
+
+      <div class="err-block" id="errBox">
+        ⚠ Access denied. This domain is not authorized. Please use your Inc.5 company Google account to sign in.
+      </div>
+
+      <div class="card-footer">
+        Protected by Google OAuth 2.0 · Inc.5 Shoes Internal
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+  if (new URLSearchParams(location.search).get("err")) {
+    document.getElementById("errBox").style.display = "block";
+  }
+</script>
+</body>
+</html>

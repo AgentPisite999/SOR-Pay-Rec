@@ -1,0 +1,144 @@
+<div class="page-wrap" style="animation:fadeUp .3s ease both">
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Agent <span class="page-title-accent">Reports</span></h1>
+      <div class="page-subtitle">View &amp; filter agent output data · Export to XLSX</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-header">
+      <div class="card-title-row">
+        <div class="card-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg>
+        </div>
+        <span class="card-title">Filters</span>
+      </div>
+      <div id="rpt-pill" style="display:none;font-family:'JetBrains Mono',monospace;font-size:11px;padding:4px 12px;border-radius:99px;border:1px solid rgba(232,168,48,.3);background:rgba(232,168,48,.07);color:#E8A830">
+        <span id="rpt-count">0</span> rows
+      </div>
+    </div>
+    <div class="card-body">
+      <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:14px;align-items:end" id="rpt-grid">
+
+        <div class="field">
+          <label class="field-label">Agent</label>
+          <select class="field-select" id="rpt-agent">
+            <option value="">— Select Agent —</option>
+            <option value="Payable Stock">Payable Stock</option>
+            <option value="Payable Trade Discount">Payable Trade Discount</option>
+            <option value="Receivable Stock">Receivable Stock</option>
+            <option value="Receivable Trade Discount">Receivable Trade Discount</option>
+            <option value="Primary Sale">Primary Sale</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label class="field-label">Month</label>
+          <select class="field-select" id="rpt-month" disabled>
+            <option value="ALL">All Months</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label class="field-label">Year</label>
+          <select class="field-select" id="rpt-year" disabled>
+            <option value="ALL">All Years</option>
+          </select>
+        </div>
+
+        <div class="field" style="display:flex;flex-direction:column">
+          <label class="field-label" style="visibility:hidden">Go</label>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn btn-primary" id="rpt-show" disabled style="justify-content:center">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              Show Report
+            </button>
+            <div style="display:flex;gap:8px">
+              <button class="btn btn-ghost" id="rpt-refresh" disabled style="flex:1;justify-content:center">
+                <svg id="rpt-ri" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                Refresh
+              </button>
+              <button class="btn btn-ghost" id="rpt-dl" style="display:none;flex:1;justify-content:center">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                XLSX
+              </button>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-body" style="padding:0;min-height:280px;display:flex;align-items:center;justify-content:center">
+
+      <!-- IDLE -->
+      <div id="s-idle" style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:60px 40px;text-align:center">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.8" style="opacity:.1"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <div style="font-size:15px;font-weight:700;color:rgba(240,237,232,.4)">Select an agent to load filters</div>
+        <div style="font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(240,237,232,.22);max-width:360px;line-height:1.7">Choose an agent above. Month &amp; Year will populate from the sheet. Then click Show Report.</div>
+      </div>
+
+      <!-- LOADING FILTERS -->
+      <div id="s-lf" style="display:none;flex-direction:column;align-items:center;gap:14px;padding:60px 40px;text-align:center">
+        <div class="loader-ring"></div>
+        <div style="font-size:15px;font-weight:700;color:rgba(240,237,232,.4)">Connecting to sheet…</div>
+        <div id="s-lf-name" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(240,237,232,.22)"></div>
+      </div>
+
+      <!-- LOADING DATA -->
+      <div id="s-ld" style="display:none;flex-direction:column;align-items:center;gap:14px;padding:60px 40px;text-align:center">
+        <div class="loader-ring"></div>
+        <div style="font-size:15px;font-weight:700;color:rgba(240,237,232,.4)">Loading report data…</div>
+        <div id="s-ld-desc" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(240,237,232,.22)"></div>
+      </div>
+
+      <!-- ERROR -->
+      <div id="s-err" style="display:none;flex-direction:column;align-items:center;gap:12px;padding:60px 40px;text-align:center;max-width:640px;margin:0 auto">
+        <div style="font-size:28px;opacity:.4">⚠</div>
+        <div style="font-size:15px;font-weight:700;color:#E05C6A">Something went wrong</div>
+        <div id="s-err-msg" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(224,92,106,.8);line-height:1.7;word-break:break-word;white-space:pre-wrap;text-align:left;background:rgba(224,92,106,.06);border:1px solid rgba(224,92,106,.15);border-radius:8px;padding:14px 16px;width:100%"></div>
+        <button class="btn btn-ghost" id="s-retry">Retry</button>
+      </div>
+
+      <!-- TABLE -->
+      <div id="s-table" style="display:none;width:100%;overflow-x:auto;overflow-y:auto;max-height:560px;align-self:flex-start">
+        <table style="width:100%;border-collapse:collapse">
+          <thead id="rpt-thead"></thead>
+          <tbody id="rpt-tbody"></tbody>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<style>
+@keyframes fadeUp  { from{opacity:0;transform:translateY(12px)} to{opacity:1;transform:translateY(0)} }
+@keyframes spin-ri { to{transform:rotate(360deg)} }
+.rpt-spin #rpt-ri  { animation:spin-ri .65s linear infinite }
+.field-select:disabled,.btn:disabled { opacity:.38;cursor:not-allowed }
+#rpt-thead th {
+  padding:10px 14px;background:#161616;border-bottom:1px solid rgba(255,255,255,.07);
+  text-align:left;font-family:'JetBrains Mono',monospace;font-size:10px;letter-spacing:.1em;
+  text-transform:uppercase;color:rgba(240,237,232,.3);white-space:nowrap;
+  position:sticky;top:0;z-index:2;
+}
+#rpt-tbody tr { border-bottom:1px solid rgba(255,255,255,.04) }
+#rpt-tbody tr:last-child { border-bottom:none }
+#rpt-tbody tr:hover { background:rgba(255,255,255,.025) }
+#rpt-tbody tr:nth-child(even) { background:rgba(255,255,255,.012) }
+#rpt-tbody td {
+  padding:9px 14px;font-family:'JetBrains Mono',monospace;
+  font-size:12px;color:rgba(240,237,232,.82);white-space:nowrap;vertical-align:middle;
+}
+#rpt-tbody td.n { text-align:right;color:rgba(240,237,232,.6) }
+#rpt-tbody td.b { font-weight:600;color:#E8A830 }
+#rpt-tbody td.e { color:rgba(240,237,232,.2) }
+@media(max-width:860px){#rpt-grid{grid-template-columns:1fr 1fr!important}}
+@media(max-width:560px){#rpt-grid{grid-template-columns:1fr!important}}
+</style>
