@@ -1,3 +1,5 @@
+
+
 # import os
 # import re
 # import json
@@ -123,7 +125,7 @@
 
 #     raise ValueError(f"Unsupported file type: {path.name}")
 
-# # -------------------- 1) Build base Rec_STK_Base (4 cols) --------------------
+# # -------------------- 1) Build base Rec_STK_Base --------------------
 # def ensure_base_cols(df: pd.DataFrame, file_path: Path) -> pd.DataFrame:
 #     df = df.copy()
 #     df.columns = [str(c).replace("\u00A0", " ").strip() for c in df.columns]
@@ -210,18 +212,30 @@
 #         df["Customer Name"] = df["Customer Name"].astype(str).str.strip()
 #     return df
 
+# def _align_columns(existing_df: pd.DataFrame, df_new: pd.DataFrame):
+#     for c in existing_df.columns:
+#         if c not in df_new.columns:
+#             df_new[c] = ""
+#     for c in df_new.columns:
+#         if c not in existing_df.columns:
+#             existing_df[c] = ""
+
+#     existing_cols = list(existing_df.columns)
+#     extra_cols = [c for c in df_new.columns if c not in existing_cols]
+#     final_cols = existing_cols + extra_cols
+
+#     existing_df = existing_df[final_cols]
+#     df_new = df_new[final_cols]
+#     return existing_df, df_new
+
 # def upsert_append_by_month_year_customer(sheet_id: str, tab_name: str, new_df: pd.DataFrame, month: str, year: str):
 #     """
-#     Rules:
-#     - If Year + Month + Customer Name match existing rows:
-#         remove those matching existing rows, then append new rows
-#     - If a row does not match on Year + Month + Customer Name:
-#         keep existing row and append new row
-#     Does NOT delete unrelated rows.
+#     Pivot push logic:
+#     - match by Year + Month + Customer Name
+#     - matched existing rows are removed
+#     - new rows are appended
+#     - unrelated rows stay untouched
 #     """
-#     month = (month or "").strip().upper()
-#     year = (year or "").strip()
-
 #     gc = get_gspread_client_from_env(write=True)
 #     sh = gc.open_by_key(sheet_id)
 
@@ -230,7 +244,6 @@
 #     except gspread.WorksheetNotFound:
 #         ws = sh.add_worksheet(title=tab_name, rows=1000, cols=max(10, new_df.shape[1] + 2))
 
-#     # read existing
 #     existing_vals = ws.get_all_values()
 #     if not existing_vals:
 #         existing_df = pd.DataFrame()
@@ -240,36 +253,19 @@
 #         existing_df = pd.DataFrame(rows, columns=headers)
 #         existing_df.columns = [str(c).strip() for c in existing_df.columns]
 
-#     # clean new_df
 #     df_new = new_df.copy().replace([pd.NA, float("inf"), float("-inf")], "")
 #     df_new = df_new.where(pd.notnull(df_new), "")
 
-#     # If sheet has no data yet -> just write
 #     if existing_df.empty:
 #         out_df = df_new
 #     else:
-#         # Ensure columns alignment
-#         for c in existing_df.columns:
-#             if c not in df_new.columns:
-#                 df_new[c] = ""
-#         for c in df_new.columns:
-#             if c not in existing_df.columns:
-#                 existing_df[c] = ""
-
-#         # reorder to existing column order + any new extra cols at end
-#         existing_cols = list(existing_df.columns)
-#         extra_cols = [c for c in df_new.columns if c not in existing_cols]
-#         final_cols = existing_cols + extra_cols
-
-#         existing_df = existing_df[final_cols]
-#         df_new = df_new[final_cols]
+#         existing_df, df_new = _align_columns(existing_df, df_new)
 
 #         existing_df = _normalize_month_year_for_compare(existing_df)
 #         df_new = _normalize_month_year_for_compare(df_new)
 #         existing_df = _normalize_customer_name_for_compare(existing_df)
 #         df_new = _normalize_customer_name_for_compare(df_new)
 
-#         # remove only rows whose Year+Month+Customer Name already exist in new data
 #         required_cols = {"Year", "Month", "Customer Name"}
 #         if required_cols.issubset(existing_df.columns) and required_cols.issubset(df_new.columns):
 #             new_keys = set(
@@ -293,14 +289,67 @@
 
 #         out_df = pd.concat([existing_df, df_new], ignore_index=True)
 
-#     # optional: keep one latest row per key after merge, just as safety
 #     if {"Year", "Month", "Customer Name"}.issubset(out_df.columns):
 #         out_df["Year"] = out_df["Year"].astype(str).str.strip()
 #         out_df["Month"] = out_df["Month"].astype(str).str.strip().str.upper()
 #         out_df["Customer Name"] = out_df["Customer Name"].astype(str).str.strip()
 #         out_df = out_df.drop_duplicates(subset=["Year", "Month", "Customer Name"], keep="last")
 
-#     # write back whole tab
+#     out_df = out_df.where(pd.notnull(out_df), "")
+#     values = [out_df.columns.tolist()] + out_df.astype(object).values.tolist()
+
+#     ws.clear()
+#     ws.update(values, value_input_option="USER_ENTERED")
+
+# def replace_batch_by_month_year(sheet_id: str, tab_name: str, new_df: pd.DataFrame, month: str, year: str):
+#     """
+#     Base push logic:
+#     - remove all existing rows for the same Year + Month
+#     - append the new batch for that Year + Month
+#     - other months remain untouched
+#     """
+#     month = (month or "").strip().upper()
+#     year = (year or "").strip()
+
+#     gc = get_gspread_client_from_env(write=True)
+#     sh = gc.open_by_key(sheet_id)
+
+#     try:
+#         ws = sh.worksheet(tab_name)
+#     except gspread.WorksheetNotFound:
+#         ws = sh.add_worksheet(title=tab_name, rows=1000, cols=max(10, new_df.shape[1] + 2))
+
+#     existing_vals = ws.get_all_values()
+#     if not existing_vals:
+#         existing_df = pd.DataFrame()
+#     else:
+#         headers = existing_vals[0]
+#         rows = existing_vals[1:]
+#         existing_df = pd.DataFrame(rows, columns=headers)
+#         existing_df.columns = [str(c).strip() for c in existing_df.columns]
+
+#     df_new = new_df.copy().replace([pd.NA, float("inf"), float("-inf")], "")
+#     df_new = df_new.where(pd.notnull(df_new), "")
+
+#     if existing_df.empty:
+#         out_df = df_new
+#     else:
+#         existing_df, df_new = _align_columns(existing_df, df_new)
+
+#         existing_df = _normalize_month_year_for_compare(existing_df)
+#         df_new = _normalize_month_year_for_compare(df_new)
+#         existing_df = _normalize_customer_name_for_compare(existing_df)
+#         df_new = _normalize_customer_name_for_compare(df_new)
+
+#         if month and year and {"Year", "Month"}.issubset(existing_df.columns):
+#             mask_same_batch = (
+#                 (existing_df["Year"].astype(str).str.strip() == year) &
+#                 (existing_df["Month"].astype(str).str.upper() == month)
+#             )
+#             existing_df = existing_df.loc[~mask_same_batch].copy()
+
+#         out_df = pd.concat([existing_df, df_new], ignore_index=True)
+
 #     out_df = out_df.where(pd.notnull(out_df), "")
 #     values = [out_df.columns.tolist()] + out_df.astype(object).values.tolist()
 
@@ -615,25 +664,38 @@
 #     print(f"{DEST_SHEET_NAME} rows: {len(df_final)}")
 #     print(f"{PIVOT_SHEET_NAME} rows: {len(pivot_df)}")
 
-#     # Push ONLY pivot to REC_STK sheet/tab with replace/append by Year+Month+Customer Name
 #     load_dotenv()
-#     target_sheet_id = env_clean(os.getenv("REC_STK_SHEET_ID", ""))
-#     target_tab_name = env_clean(os.getenv("REC_STK_TAB_NAME", ""))
 
-#     if not target_sheet_id or not target_tab_name:
-#         print("REC_STK_SHEET_ID or REC_STK_TAB_NAME missing in .env. Skipping push.")
-#         return
+#     # 1) Push pivot
+#     pivot_sheet_id = env_clean(os.getenv("REC_STK_SHEET_ID", ""))
+#     pivot_tab_name = env_clean(os.getenv("REC_STK_TAB_NAME", ""))
 
-#     print(
-#         f"Upsert/append pivot to Google Sheet tab '{target_tab_name}' "
-#         f"using Year+Month+Customer Name (Month={month}, Year={year}) ..."
-#     )
-#     upsert_append_by_month_year_customer(target_sheet_id, target_tab_name, pivot_df, month, year)
-#     print("Google Sheet update done.")
+#     if not pivot_sheet_id or not pivot_tab_name:
+#         print("REC_STK_SHEET_ID or REC_STK_TAB_NAME missing in .env. Skipping pivot push.")
+#     else:
+#         print(
+#             f"Upsert/append pivot to Google Sheet tab '{pivot_tab_name}' "
+#             f"using Year+Month+Customer Name (Month={month}, Year={year}) ..."
+#         )
+#         upsert_append_by_month_year_customer(pivot_sheet_id, pivot_tab_name, pivot_df, month, year)
+#         print("Pivot Google Sheet update done.")
+
+#     # 2) Push base
+#     base_sheet_id = env_clean(os.getenv("REC_STK_BASE_SHEET_ID", ""))
+#     base_tab_name = env_clean(os.getenv("REC_STK_BASE_TAB_NAME", ""))
+
+#     if not base_sheet_id or not base_tab_name:
+#         print("REC_STK_BASE_SHEET_ID or REC_STK_BASE_TAB_NAME missing in .env. Skipping base push.")
+#     else:
+#         print(
+#             f"Replace/append base data to Google Sheet tab '{base_tab_name}' "
+#             f"using full batch replacement by Year+Month (Month={month}, Year={year}) ..."
+#         )
+#         replace_batch_by_month_year(base_sheet_id, base_tab_name, df_final, month, year)
+#         print("Base Google Sheet update done.")
 
 # if __name__ == "__main__":
 #     main()
-
 
 
 import os
@@ -730,8 +792,8 @@ def infer_customer_from_filename(filename: str) -> str:
 
 def drop_fully_blank_rows(df4: pd.DataFrame) -> pd.DataFrame:
     df4 = df4.copy()
-    df4["Customer Name"] = df4["Customer Name"].astype(str).fillna("").str.strip()
-    df4["Barcode"] = df4["Barcode"].astype(str).fillna("").str.strip()
+    df4["Customer Name"] = df4["Customer Name"].fillna("").astype(str).str.strip()
+    df4["Barcode"] = df4["Barcode"].fillna("").astype(str).str.strip()
 
     mask_any = (
         df4["Customer Name"].ne("")
@@ -774,27 +836,27 @@ def ensure_base_cols(df: pd.DataFrame, file_path: Path) -> pd.DataFrame:
 
     if fixed == "Flipkart":
         qty_col = pick_first_existing(col_map, ["soh", "soh qty"])
-        customer_series = pd.Series(["Flipkart"] * len(df))
+        customer_series = pd.Series(["Flipkart"] * len(df), index=df.index)
 
     elif fixed == "Myntra":
         qty_col = pick_first_existing(col_map, ["count_", "count"])
-        customer_series = pd.Series(["Myntra"] * len(df))
+        customer_series = pd.Series(["Myntra"] * len(df), index=df.index)
 
     elif fixed == "Reliance Ajio SOR":
         qty_col = pick_first_existing(col_map, ["count_", "count", "active qty", "active_qty"])
-        customer_series = pd.Series(["Reliance Ajio SOR"] * len(df))
+        customer_series = pd.Series(["Reliance Ajio SOR"] * len(df), index=df.index)
 
     else:
         partner_col = pick_first_existing(col_map, ["partner", "partner name"])
         qty_col = pick_first_existing(col_map, ["closing stock", "closing_stock"])
         customer_series = (
-            df[partner_col].astype(str).fillna("").str.strip()
-            if partner_col else pd.Series([""] * len(df))
+            df[partner_col].fillna("").astype(str).str.strip()
+            if partner_col else pd.Series([""] * len(df), index=df.index)
         )
 
-    barcode_series = df[barcode_col].map(normalize_ean) if barcode_col else pd.Series([""] * len(df))
-    qty_series = to_num(df[qty_col]) if qty_col else pd.Series([pd.NA] * len(df))
-    mrp_series = to_num(df[mrp_col]) if mrp_col else pd.Series([pd.NA] * len(df))
+    barcode_series = df[barcode_col].map(normalize_ean) if barcode_col else pd.Series([""] * len(df), index=df.index)
+    qty_series = to_num(df[qty_col]) if qty_col else pd.Series([pd.NA] * len(df), index=df.index)
+    mrp_series = to_num(df[mrp_col]) if mrp_col else pd.Series([pd.NA] * len(df), index=df.index)
 
     out = pd.DataFrame({
         "Customer Name": customer_series,
@@ -995,11 +1057,21 @@ def replace_batch_by_month_year(sheet_id: str, tab_name: str, new_df: pd.DataFra
 # -------------------- 2) Margin rules + COGS map --------------------
 STOP_WORDS = {
     "PVT", "PRIVATE", "LTD", "LIMITED", "LLP", "INDIA",
-    "INTERNATIONAL", "GLOBAL", "VENTURE", "PVT.", "LTD."
+    "INTERNATIONAL", "GLOBAL", "VENTURE", "PVT.", "LTD.",
+    "THE", "AND"
+}
+
+GENERIC_AMBIGUOUS_TOKENS = {
+    "RELIANCE", "RETAIL", "STORE", "SHOP", "ONLINE", "SOR"
 }
 
 def norm_name(s: str) -> str:
-    return re.sub(r"[^A-Z0-9]+", " ", str(s or "").upper()).strip()
+    s = str(s or "").upper().strip()
+    s = s.replace("&", " AND ")
+    s = re.sub(r"[_\-/\\]+", " ", s)
+    s = re.sub(r"[^A-Z0-9 ]+", " ", s)
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
 
 def singular_word(w: str) -> str:
     if len(w) > 3 and w.endswith("S"):
@@ -1007,7 +1079,7 @@ def singular_word(w: str) -> str:
     return w
 
 def tokenize(normed: str):
-    toks = [t.strip() for t in normed.split(" ") if t.strip()]
+    toks = [t.strip() for t in str(normed).split(" ") if t.strip()]
     toks = [singular_word(t) for t in toks]
     toks = [t for t in toks if t and t not in STOP_WORDS]
     return toks
@@ -1034,6 +1106,87 @@ def to_percent_number(v):
     except:
         return ""
 
+def generate_aliases(master_name_raw: str):
+    """
+    Build safe aliases for a master customer.
+    Returns normalized alias strings.
+    """
+    raw = str(master_name_raw or "").strip()
+    if not raw:
+        return set()
+
+    aliases = set()
+
+    full_norm = norm_name(raw)
+    if full_norm:
+        aliases.add(full_norm)
+
+    split_parts = [p.strip() for p in re.split(r"[_\-/\\]+", raw) if p.strip()]
+    for p in split_parts:
+        pn = norm_name(p)
+        if pn:
+            aliases.add(pn)
+
+    full_upper = full_norm
+
+    if full_upper == "RELIANCE CENTRO":
+        aliases.update({
+            "CENTRO",
+            "RELIANCE CENTRO",
+        })
+
+    elif full_upper == "RELIANCE AJIO SOR":
+        aliases.update({
+            "AJIO",
+            "AJIO SOR",
+            "RELIANCE AJIO",
+            "RELIANCE AJIO SOR",
+        })
+
+    elif full_upper == "LEAYAN ZUUP":
+        aliases.update({
+            "LEAYAN",
+            "ZUUP",
+            "LEAYAN ZUUP",
+        })
+
+    return {a for a in aliases if a}
+
+def build_margin_index(df_m: pd.DataFrame, cust_col: str, margin_col: str):
+    """
+    Creates:
+    1) exact_map -> exact normalized alias to margin
+    2) token_rules -> strong token-based rules
+    """
+    exact_map = {}
+    token_rules = []
+
+    for _, row in df_m.iterrows():
+        master_name_raw = str(row.get(cust_col, "")).strip()
+        if not master_name_raw:
+            continue
+
+        margin_val = to_percent_number(row.get(margin_col, ""))
+        if margin_val == "":
+            continue
+
+        aliases = generate_aliases(master_name_raw)
+
+        for alias in aliases:
+            exact_map[alias] = float(margin_val)
+
+            toks = tokenize(alias)
+            if toks:
+                token_rules.append({
+                    "alias": alias,
+                    "tokens": set(toks),
+                    "margin": float(margin_val),
+                    "score": len(set(toks)) * 1000 + len(alias),
+                })
+
+    token_rules.sort(key=lambda r: r["score"], reverse=True)
+    return exact_map, token_rules
+
 def load_margin_rules_and_cogs_map():
     load_dotenv()
     source_spreadsheet_id = env_clean(os.getenv("SOURCE_SPREADSHEET_ID1", ""))
@@ -1057,36 +1210,7 @@ def load_margin_rules_and_cogs_map():
     if not cust_col or not margin_col:
         raise RuntimeError("Margin sheet must have columns: Customer Name, Margin")
 
-    rules = []
-    for _, row in df_m.iterrows():
-        master_name_raw = str(row.get(cust_col, "")).strip()
-        if not master_name_raw:
-            continue
-        margin_val = to_percent_number(row.get(margin_col, ""))
-        if margin_val == "":
-            continue
-
-        key_norm = norm_name(master_name_raw.replace("_", " "))
-        toks = tokenize(key_norm)
-        if toks:
-            rules.append({
-                "tokens": set(toks),
-                "margin": float(margin_val),
-                "score": len(toks) * 1000 + len(key_norm),
-            })
-
-        if "_" in master_name_raw:
-            alias = master_name_raw.split("_")[0]
-            alias_norm = norm_name(alias)
-            alias_toks = tokenize(alias_norm)
-            if alias_toks:
-                rules.append({
-                    "tokens": set(alias_toks),
-                    "margin": float(margin_val),
-                    "score": len(alias_toks) * 1000 + len(alias_norm),
-                })
-
-    rules.sort(key=lambda r: r["score"], reverse=True)
+    margin_exact_map, margin_token_rules = build_margin_index(df_m, cust_col, margin_col)
 
     ws_c = sh.worksheet(cogs_sheet_name)
     df_c = worksheet_to_df(ws_c)
@@ -1107,9 +1231,63 @@ def load_margin_rules_and_cogs_map():
         val = pd.to_numeric(row.get(cogs_col, ""), errors="coerce")
         cogs_map[bc] = float(val) if pd.notna(val) else row.get(cogs_col, "")
 
-    return rules, cogs_map
+    return margin_exact_map, margin_token_rules, cogs_map
 
-def apply_margin_and_cogs(df_base: pd.DataFrame, margin_rules, cogs_map) -> pd.DataFrame:
+def resolve_margin(customer_name: str, margin_exact_map, margin_token_rules):
+    """
+    Matching priority:
+    1. exact normalized match
+    2. exact alias match
+    3. safe token subset match
+    4. ambiguous -> blank
+    """
+    cn_norm = norm_name(customer_name)
+    if not cn_norm:
+        return ""
+
+    if cn_norm in margin_exact_map:
+        return margin_exact_map[cn_norm]
+
+    tokset = set(tokenize(cn_norm))
+    if not tokset:
+        return ""
+
+    if len(tokset) == 1 and list(tokset)[0] in GENERIC_AMBIGUOUS_TOKENS:
+        return ""
+
+    matches = []
+    for rule in margin_token_rules:
+        rule_tokens = rule["tokens"]
+
+        if tokset == rule_tokens:
+            matches.append(rule)
+            continue
+
+        if rule_tokens.issubset(tokset):
+            matches.append(rule)
+            continue
+
+        if tokset.issubset(rule_tokens):
+            if len(tokset) == 1:
+                only_tok = next(iter(tokset))
+                if only_tok in GENERIC_AMBIGUOUS_TOKENS:
+                    continue
+            matches.append(rule)
+
+    if not matches:
+        return ""
+
+    matches.sort(key=lambda x: x["score"], reverse=True)
+
+    if len(matches) > 1:
+        top = matches[0]
+        second = matches[1]
+        if top["score"] == second["score"] and top["margin"] != second["margin"]:
+            return ""
+
+    return matches[0]["margin"]
+
+def apply_margin_and_cogs(df_base: pd.DataFrame, margin_exact_map, margin_token_rules, cogs_map) -> pd.DataFrame:
     df = df_base.copy()
 
     if "Margin %" not in df.columns:
@@ -1117,20 +1295,9 @@ def apply_margin_and_cogs(df_base: pd.DataFrame, margin_rules, cogs_map) -> pd.D
     if "COGS Rate" not in df.columns:
         df["COGS Rate"] = ""
 
-    cust_norm = df["Customer Name"].fillna("").astype(str).map(norm_name)
-
-    def match_margin(cn: str):
-        if not cn.strip():
-            return ""
-        tokset = set(tokenize(cn))
-        if not tokset:
-            return ""
-        for rule in margin_rules:
-            if rule["tokens"].issubset(tokset):
-                return rule["margin"]
-        return ""
-
-    df["Margin %"] = cust_norm.map(match_margin)
+    df["Margin %"] = df["Customer Name"].fillna("").astype(str).map(
+        lambda x: resolve_margin(x, margin_exact_map, margin_token_rules)
+    )
 
     bcs = df["Barcode"].fillna("").astype(str).map(normalize_ean)
     df["COGS Rate"] = bcs.map(lambda b: cogs_map.get(b, ""))
@@ -1256,8 +1423,12 @@ def main():
     if not input_dir.exists():
         raise FileNotFoundError(f"Input folder not found: {input_dir}")
 
-    margin_rules, cogs_map = load_margin_rules_and_cogs_map()
-    print(f"Loaded margin rules: {len(margin_rules)}, cogs rows: {len(cogs_map)}")
+    margin_exact_map, margin_token_rules, cogs_map = load_margin_rules_and_cogs_map()
+    print(
+        f"Loaded margin aliases: {len(margin_exact_map)}, "
+        f"margin token rules: {len(margin_token_rules)}, "
+        f"cogs rows: {len(cogs_map)}"
+    )
 
     files = []
     for ext in ("*.xlsx", "*.xls", "*.xlsb", "*.csv"):
@@ -1288,7 +1459,7 @@ def main():
 
     df_base = pd.concat(parts, ignore_index=True)
 
-    df_enriched = apply_margin_and_cogs(df_base, margin_rules, cogs_map)
+    df_enriched = apply_margin_and_cogs(df_base, margin_exact_map, margin_token_rules, cogs_map)
     df_final = calc_billing_and_reorder(df_enriched)
     pivot_df = generate_pivot(df_final)
 
