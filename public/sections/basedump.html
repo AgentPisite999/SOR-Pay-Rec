@@ -1,0 +1,176 @@
+<div class="page-wrap" id="page-basedump" style="animation: fadeUp 0.3s ease both">
+
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Base <span class="page-title-accent">Dump</span></h1>
+      <div class="page-subtitle">Browse output runs · Filter by month &amp; year · Download as ZIP</div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px">
+    <div class="card-body" style="padding:20px 24px">
+      <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:flex-end">
+
+        <!-- Agent -->
+        <div class="field" style="margin:0; min-width:220px; flex:1">
+          <label class="field-label" for="bdAgent">Select Agent</label>
+          <select class="field-select" id="bdAgent">
+            <option value="">— Select Agent —</option>
+            <option value="Payable Stock">Payable Stock</option>
+            <option value="Payable Trade Discount">Payable Trade Discount</option>
+            <option value="Receivable Stock">Receivable Stock</option>
+            <option value="Receivable Trade Discount">Receivable Trade Discount</option>
+            <option value="Primary Sale">Primary Sale</option>
+          </select>
+        </div>
+
+        <!-- Month -->
+        <div class="field" style="margin:0; min-width:140px">
+          <label class="field-label" for="bdMonth">Month</label>
+          <select class="field-select" id="bdMonth">
+            <option value="">All Months</option>
+            <option value="01">January</option>
+            <option value="02">February</option>
+            <option value="03">March</option>
+            <option value="04">April</option>
+            <option value="05">May</option>
+            <option value="06">June</option>
+            <option value="07">July</option>
+            <option value="08">August</option>
+            <option value="09">September</option>
+            <option value="10">October</option>
+            <option value="11">November</option>
+            <option value="12">December</option>
+          </select>
+        </div>
+
+        <!-- Year -->
+        <div class="field" style="margin:0; min-width:110px">
+          <label class="field-label" for="bdYear">Year</label>
+          <input class="field-input" id="bdYear" type="number" min="2020" max="2100" placeholder="2026" />
+        </div>
+
+        <!-- Browse Button -->
+        <div style="padding-bottom:0">
+          <button class="btn btn-primary" id="bdBrowse" type="button" style="height:40px">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+            Browse Runs
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title-row">
+        <div class="card-icon">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+        </div>
+        <span class="card-title" id="bdResultTitle">Output Runs</span>
+      </div>
+      <div id="bdCount" style="font-family:'JetBrains Mono',monospace;font-size:11px;color:rgba(240,237,232,0.45)"></div>
+    </div>
+
+    <div class="card-body" style="padding:0">
+      <div id="bdResults">
+        <div class="empty-state" style="padding:48px 24px">
+          <div class="empty-icon">📂</div>
+          <div class="empty-title">Select an agent and browse runs</div>
+          <div class="empty-sub">Output folders will appear here</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<style>
+@keyframes fadeUp {
+  from { opacity:0; transform:translateY(12px); }
+  to   { opacity:1; transform:translateY(0); }
+}
+
+.bd-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.bd-table th {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: rgba(240,237,232,0.4);
+  text-transform: uppercase;
+  padding: 10px 20px;
+  text-align: left;
+  border-bottom: 1px solid rgba(240,237,232,0.06);
+}
+.bd-table td {
+  padding: 13px 20px;
+  border-bottom: 1px solid rgba(240,237,232,0.05);
+  vertical-align: middle;
+}
+.bd-table tr:last-child td { border-bottom: none; }
+.bd-table tr:hover td { background: rgba(240,237,232,0.03); }
+
+.bd-folder-name {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: rgba(240,237,232,0.85);
+}
+.bd-date-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: rgba(240,237,232,0.5);
+}
+.bd-badge {
+  display: inline-block;
+  padding: 2px 9px;
+  border-radius: 99px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  background: rgba(232,168,48,0.1);
+  color: rgba(232,168,48,0.9);
+  border: 1px solid rgba(232,168,48,0.2);
+}
+
+.btn-zip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(240,237,232,0.12);
+  background: rgba(240,237,232,0.04);
+  color: rgba(240,237,232,0.8);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+.btn-zip:hover {
+  background: rgba(232,168,48,0.1);
+  border-color: rgba(232,168,48,0.3);
+  color: rgba(232,168,48,1);
+}
+.btn-zip:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn-zip.loading {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+.bd-spinner {
+  width: 12px; height: 12px;
+  border: 2px solid rgba(232,168,48,0.3);
+  border-top-color: rgba(232,168,48,0.9);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+  display: inline-block;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+</style>

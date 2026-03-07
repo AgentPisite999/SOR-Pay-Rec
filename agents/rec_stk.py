@@ -1,7 +1,3 @@
-
-
-
-
 # import os
 # import re
 # import json
@@ -29,45 +25,35 @@
 #         default="REC_STK_MASTER.xlsx",
 #         help="Output Excel file name (default: REC_STK_MASTER.xlsx)",
 #     )
+#     ap.add_argument("--month", default="", help="Month label (e.g. JAN, FEB, ...)")
+#     ap.add_argument("--year", default="", help="Year (e.g. 2026)")
 #     return ap.parse_args()
 
 # # -------------------- .env helper --------------------
 # def env_clean(v: str, default: str = "") -> str:
-#     """
-#     Make .env tolerant:
-#     - strips surrounding quotes
-#     - strips trailing semicolons
-#     - trims spaces
-#     Works even if you wrote: NAME= "Value" ;
-#     """
 #     if v is None:
 #         return default
 #     s = str(v).strip()
-#     # remove surrounding quotes
 #     if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
 #         s = s[1:-1].strip()
-#     # remove trailing semicolon
 #     if s.endswith(";"):
 #         s = s[:-1].strip()
 #     return s or default
 
 # # -------------------- Common helpers --------------------
 # def canon(x: str) -> str:
-#     """Header canonicalization (case/space/punct-insensitive)."""
 #     s = str(x).replace("\u00A0", " ").strip().lower()
 #     s = re.sub(r"[_\-\.\(\)\[\]\/\\]+", " ", s)
 #     s = " ".join(s.split())
 #     return s
 
 # def build_canon_map(cols):
-#     """canonical -> actual (prefers LAST if duplicates)"""
 #     m = {}
 #     for c in cols:
 #         m[canon(c)] = c
 #     return m
 
 # def pick_first_existing(col_map, candidates):
-#     """Return actual column name for first canonical match."""
 #     for c in candidates:
 #         if c in col_map:
 #             return col_map[c]
@@ -77,32 +63,21 @@
 #     return pd.to_numeric(s, errors="coerce")
 
 # def normalize_ean(x) -> str:
-#     """
-#     Normalize barcode/EAN robustly:
-#     - float like 8.90913e+12 -> integer string
-#     - string sci-notation -> integer string
-#     - strip spaces, remove trailing .0
-#     """
 #     if x is None:
 #         return ""
-
 #     if isinstance(x, int):
 #         return str(x)
-
 #     if isinstance(x, float):
 #         if math.isfinite(x):
 #             return str(int(round(x)))
 #         return ""
-
 #     s = str(x).replace("\u00A0", " ").strip()
 #     s = re.sub(r"\.0$", "", s)
-
 #     if re.match(r"^\d+(\.\d+)?e\+\d+$", s.lower()):
 #         try:
 #             return str(int(round(float(s))))
 #         except:
 #             return s
-
 #     return s
 
 # def infer_customer_from_filename(filename: str) -> str:
@@ -130,11 +105,6 @@
 
 # # -------------------- Read files (all sheets) --------------------
 # def read_any_file_all_sheets(path: Path):
-#     """
-#     CSV: 1 DF
-#     Excel: ALL sheets
-#     XLSB: needs `pip install pyxlsb`
-#     """
 #     suf = path.suffix.lower()
 
 #     if suf == ".csv":
@@ -155,10 +125,6 @@
 
 # # -------------------- 1) Build base Rec_STK_Base (4 cols) --------------------
 # def ensure_base_cols(df: pd.DataFrame, file_path: Path) -> pd.DataFrame:
-#     """
-#     Output columns:
-#       Customer Name, Barcode, Qty., MRP Rate
-#     """
 #     df = df.copy()
 #     df.columns = [str(c).replace("\u00A0", " ").strip() for c in df.columns]
 #     col_map = build_canon_map(df.columns)
@@ -200,14 +166,25 @@
 #     })
 #     return out
 
-# # -------------------- Google Sheets (Service Account) --------------------
-# def get_gspread_client_from_env():
+# def add_month_year_cols(df: pd.DataFrame, month: str, year: str) -> pd.DataFrame:
+#     df = df.copy()
+#     month = (month or "").strip().upper()
+#     year = (year or "").strip()
+#     if month and year:
+#         df.insert(0, "Month", month)
+#         df.insert(0, "Year", year)
+#     return df
+
+# # -------------------- Google Sheets --------------------
+# def get_gspread_client_from_env(write: bool = False):
 #     load_dotenv()
 #     b64 = os.getenv("GOOGLE_SA_JSON_B64")
 #     if not b64:
 #         raise RuntimeError("Missing GOOGLE_SA_JSON_B64 in .env (must be one-line base64).")
 #     sa_json = json.loads(base64.b64decode(b64).decode("utf-8"))
 #     scopes = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+#     if write:
+#         scopes = ["https://www.googleapis.com/auth/spreadsheets"]
 #     creds = Credentials.from_service_account_info(sa_json, scopes=scopes)
 #     return gspread.authorize(creds)
 
@@ -220,6 +197,115 @@
 #     df = pd.DataFrame(rows, columns=headers)
 #     df.columns = [str(c).strip() for c in df.columns]
 #     return df
+
+# def _normalize_month_year_for_compare(df: pd.DataFrame):
+#     if "Year" in df.columns:
+#         df["Year"] = df["Year"].astype(str).str.strip()
+#     if "Month" in df.columns:
+#         df["Month"] = df["Month"].astype(str).str.strip().str.upper()
+#     return df
+
+# def _normalize_customer_name_for_compare(df: pd.DataFrame):
+#     if "Customer Name" in df.columns:
+#         df["Customer Name"] = df["Customer Name"].astype(str).str.strip()
+#     return df
+
+# def upsert_append_by_month_year_customer(sheet_id: str, tab_name: str, new_df: pd.DataFrame, month: str, year: str):
+#     """
+#     Rules:
+#     - If Year + Month + Customer Name match existing rows:
+#         remove those matching existing rows, then append new rows
+#     - If a row does not match on Year + Month + Customer Name:
+#         keep existing row and append new row
+#     Does NOT delete unrelated rows.
+#     """
+#     month = (month or "").strip().upper()
+#     year = (year or "").strip()
+
+#     gc = get_gspread_client_from_env(write=True)
+#     sh = gc.open_by_key(sheet_id)
+
+#     try:
+#         ws = sh.worksheet(tab_name)
+#     except gspread.WorksheetNotFound:
+#         ws = sh.add_worksheet(title=tab_name, rows=1000, cols=max(10, new_df.shape[1] + 2))
+
+#     # read existing
+#     existing_vals = ws.get_all_values()
+#     if not existing_vals:
+#         existing_df = pd.DataFrame()
+#     else:
+#         headers = existing_vals[0]
+#         rows = existing_vals[1:]
+#         existing_df = pd.DataFrame(rows, columns=headers)
+#         existing_df.columns = [str(c).strip() for c in existing_df.columns]
+
+#     # clean new_df
+#     df_new = new_df.copy().replace([pd.NA, float("inf"), float("-inf")], "")
+#     df_new = df_new.where(pd.notnull(df_new), "")
+
+#     # If sheet has no data yet -> just write
+#     if existing_df.empty:
+#         out_df = df_new
+#     else:
+#         # Ensure columns alignment
+#         for c in existing_df.columns:
+#             if c not in df_new.columns:
+#                 df_new[c] = ""
+#         for c in df_new.columns:
+#             if c not in existing_df.columns:
+#                 existing_df[c] = ""
+
+#         # reorder to existing column order + any new extra cols at end
+#         existing_cols = list(existing_df.columns)
+#         extra_cols = [c for c in df_new.columns if c not in existing_cols]
+#         final_cols = existing_cols + extra_cols
+
+#         existing_df = existing_df[final_cols]
+#         df_new = df_new[final_cols]
+
+#         existing_df = _normalize_month_year_for_compare(existing_df)
+#         df_new = _normalize_month_year_for_compare(df_new)
+#         existing_df = _normalize_customer_name_for_compare(existing_df)
+#         df_new = _normalize_customer_name_for_compare(df_new)
+
+#         # remove only rows whose Year+Month+Customer Name already exist in new data
+#         required_cols = {"Year", "Month", "Customer Name"}
+#         if required_cols.issubset(existing_df.columns) and required_cols.issubset(df_new.columns):
+#             new_keys = set(
+#                 zip(
+#                     df_new["Year"].astype(str).str.strip(),
+#                     df_new["Month"].astype(str).str.upper(),
+#                     df_new["Customer Name"].astype(str).str.strip(),
+#                 )
+#             )
+
+#             existing_keys = list(
+#                 zip(
+#                     existing_df["Year"].astype(str).str.strip(),
+#                     existing_df["Month"].astype(str).str.upper(),
+#                     existing_df["Customer Name"].astype(str).str.strip(),
+#                 )
+#             )
+
+#             mask_same = [key in new_keys for key in existing_keys]
+#             existing_df = existing_df.loc[[not matched for matched in mask_same]].copy()
+
+#         out_df = pd.concat([existing_df, df_new], ignore_index=True)
+
+#     # optional: keep one latest row per key after merge, just as safety
+#     if {"Year", "Month", "Customer Name"}.issubset(out_df.columns):
+#         out_df["Year"] = out_df["Year"].astype(str).str.strip()
+#         out_df["Month"] = out_df["Month"].astype(str).str.strip().str.upper()
+#         out_df["Customer Name"] = out_df["Customer Name"].astype(str).str.strip()
+#         out_df = out_df.drop_duplicates(subset=["Year", "Month", "Customer Name"], keep="last")
+
+#     # write back whole tab
+#     out_df = out_df.where(pd.notnull(out_df), "")
+#     values = [out_df.columns.tolist()] + out_df.astype(object).values.tolist()
+
+#     ws.clear()
+#     ws.update(values, value_input_option="USER_ENTERED")
 
 # # -------------------- 2) Margin rules + COGS map --------------------
 # STOP_WORDS = {
@@ -242,7 +328,6 @@
 #     return toks
 
 # def to_percent_number(v):
-#     """Return decimal percent: 30% -> 0.30 ; 0.30 -> 0.30 ; 30 -> 0.30"""
 #     if v is None:
 #         return ""
 #     if isinstance(v, (int, float)):
@@ -250,7 +335,6 @@
 #             return ""
 #         v = float(v)
 #         return v / 100.0 if v > 1 else v
-
 #     s = str(v).strip()
 #     if not s:
 #         return ""
@@ -277,7 +361,6 @@
 #     gc = get_gspread_client_from_env()
 #     sh = gc.open_by_key(source_spreadsheet_id)
 
-#     # ---- Margin ----
 #     ws_m = sh.worksheet(margin_sheet_name)
 #     df_m = worksheet_to_df(ws_m)
 #     if df_m.empty:
@@ -320,7 +403,6 @@
 
 #     rules.sort(key=lambda r: r["score"], reverse=True)
 
-#     # ---- COGS ----
 #     ws_c = sh.worksheet(cogs_sheet_name)
 #     df_c = worksheet_to_df(ws_c)
 #     if df_c.empty:
@@ -370,7 +452,7 @@
 
 #     return df
 
-# # -------------------- 3) Billing calc + reorder (Year/Month only if present) --------------------
+# # -------------------- 3) Billing calc + reorder --------------------
 # def to_percent_fraction(v):
 #     if v is None or (isinstance(v, float) and pd.isna(v)):
 #         return 0.0
@@ -483,6 +565,9 @@
 #     output_dir.mkdir(parents=True, exist_ok=True)
 #     output_file = output_dir / args.output_name
 
+#     month = (args.month or "").strip().upper()
+#     year = (args.year or "").strip()
+
 #     if not input_dir.exists():
 #         raise FileNotFoundError(f"Input folder not found: {input_dir}")
 
@@ -506,6 +591,7 @@
 #             for df in dfs:
 #                 base = ensure_base_cols(df, p)
 #                 base = drop_fully_blank_rows(base)
+#                 base = add_month_year_cols(base, month, year)
 #                 if not base.empty:
 #                     parts.append(base)
 #         except Exception as e:
@@ -529,9 +615,24 @@
 #     print(f"{DEST_SHEET_NAME} rows: {len(df_final)}")
 #     print(f"{PIVOT_SHEET_NAME} rows: {len(pivot_df)}")
 
+#     # Push ONLY pivot to REC_STK sheet/tab with replace/append by Year+Month+Customer Name
+#     load_dotenv()
+#     target_sheet_id = env_clean(os.getenv("REC_STK_SHEET_ID", ""))
+#     target_tab_name = env_clean(os.getenv("REC_STK_TAB_NAME", ""))
+
+#     if not target_sheet_id or not target_tab_name:
+#         print("REC_STK_SHEET_ID or REC_STK_TAB_NAME missing in .env. Skipping push.")
+#         return
+
+#     print(
+#         f"Upsert/append pivot to Google Sheet tab '{target_tab_name}' "
+#         f"using Year+Month+Customer Name (Month={month}, Year={year}) ..."
+#     )
+#     upsert_append_by_month_year_customer(target_sheet_id, target_tab_name, pivot_df, month, year)
+#     print("Google Sheet update done.")
+
 # if __name__ == "__main__":
 #     main()
-
 
 
 
@@ -660,7 +761,7 @@ def read_any_file_all_sheets(path: Path):
 
     raise ValueError(f"Unsupported file type: {path.name}")
 
-# -------------------- 1) Build base Rec_STK_Base (4 cols) --------------------
+# -------------------- 1) Build base Rec_STK_Base --------------------
 def ensure_base_cols(df: pd.DataFrame, file_path: Path) -> pd.DataFrame:
     df = df.copy()
     df.columns = [str(c).replace("\u00A0", " ").strip() for c in df.columns]
@@ -736,21 +837,112 @@ def worksheet_to_df(ws) -> pd.DataFrame:
     return df
 
 def _normalize_month_year_for_compare(df: pd.DataFrame):
-    # force to string for safe compare
     if "Year" in df.columns:
         df["Year"] = df["Year"].astype(str).str.strip()
     if "Month" in df.columns:
         df["Month"] = df["Month"].astype(str).str.strip().str.upper()
     return df
 
-def upsert_append_by_month_year(sheet_id: str, tab_name: str, new_df: pd.DataFrame, month: str, year: str):
+def _normalize_customer_name_for_compare(df: pd.DataFrame):
+    if "Customer Name" in df.columns:
+        df["Customer Name"] = df["Customer Name"].astype(str).str.strip()
+    return df
+
+def _align_columns(existing_df: pd.DataFrame, df_new: pd.DataFrame):
+    for c in existing_df.columns:
+        if c not in df_new.columns:
+            df_new[c] = ""
+    for c in df_new.columns:
+        if c not in existing_df.columns:
+            existing_df[c] = ""
+
+    existing_cols = list(existing_df.columns)
+    extra_cols = [c for c in df_new.columns if c not in existing_cols]
+    final_cols = existing_cols + extra_cols
+
+    existing_df = existing_df[final_cols]
+    df_new = df_new[final_cols]
+    return existing_df, df_new
+
+def upsert_append_by_month_year_customer(sheet_id: str, tab_name: str, new_df: pd.DataFrame, month: str, year: str):
     """
-    Rules:
-    - If month+year provided:
-        remove existing rows matching that month+year, then append new rows
-    - Else:
-        append new rows
-    Does NOT delete other months.
+    Pivot push logic:
+    - match by Year + Month + Customer Name
+    - matched existing rows are removed
+    - new rows are appended
+    - unrelated rows stay untouched
+    """
+    gc = get_gspread_client_from_env(write=True)
+    sh = gc.open_by_key(sheet_id)
+
+    try:
+        ws = sh.worksheet(tab_name)
+    except gspread.WorksheetNotFound:
+        ws = sh.add_worksheet(title=tab_name, rows=1000, cols=max(10, new_df.shape[1] + 2))
+
+    existing_vals = ws.get_all_values()
+    if not existing_vals:
+        existing_df = pd.DataFrame()
+    else:
+        headers = existing_vals[0]
+        rows = existing_vals[1:]
+        existing_df = pd.DataFrame(rows, columns=headers)
+        existing_df.columns = [str(c).strip() for c in existing_df.columns]
+
+    df_new = new_df.copy().replace([pd.NA, float("inf"), float("-inf")], "")
+    df_new = df_new.where(pd.notnull(df_new), "")
+
+    if existing_df.empty:
+        out_df = df_new
+    else:
+        existing_df, df_new = _align_columns(existing_df, df_new)
+
+        existing_df = _normalize_month_year_for_compare(existing_df)
+        df_new = _normalize_month_year_for_compare(df_new)
+        existing_df = _normalize_customer_name_for_compare(existing_df)
+        df_new = _normalize_customer_name_for_compare(df_new)
+
+        required_cols = {"Year", "Month", "Customer Name"}
+        if required_cols.issubset(existing_df.columns) and required_cols.issubset(df_new.columns):
+            new_keys = set(
+                zip(
+                    df_new["Year"].astype(str).str.strip(),
+                    df_new["Month"].astype(str).str.upper(),
+                    df_new["Customer Name"].astype(str).str.strip(),
+                )
+            )
+
+            existing_keys = list(
+                zip(
+                    existing_df["Year"].astype(str).str.strip(),
+                    existing_df["Month"].astype(str).str.upper(),
+                    existing_df["Customer Name"].astype(str).str.strip(),
+                )
+            )
+
+            mask_same = [key in new_keys for key in existing_keys]
+            existing_df = existing_df.loc[[not matched for matched in mask_same]].copy()
+
+        out_df = pd.concat([existing_df, df_new], ignore_index=True)
+
+    if {"Year", "Month", "Customer Name"}.issubset(out_df.columns):
+        out_df["Year"] = out_df["Year"].astype(str).str.strip()
+        out_df["Month"] = out_df["Month"].astype(str).str.strip().str.upper()
+        out_df["Customer Name"] = out_df["Customer Name"].astype(str).str.strip()
+        out_df = out_df.drop_duplicates(subset=["Year", "Month", "Customer Name"], keep="last")
+
+    out_df = out_df.where(pd.notnull(out_df), "")
+    values = [out_df.columns.tolist()] + out_df.astype(object).values.tolist()
+
+    ws.clear()
+    ws.update(values, value_input_option="USER_ENTERED")
+
+def replace_batch_by_month_year(sheet_id: str, tab_name: str, new_df: pd.DataFrame, month: str, year: str):
+    """
+    Base push logic:
+    - remove all existing rows for the same Year + Month
+    - append the new batch for that Year + Month
+    - other months remain untouched
     """
     month = (month or "").strip().upper()
     year = (year or "").strip()
@@ -763,7 +955,6 @@ def upsert_append_by_month_year(sheet_id: str, tab_name: str, new_df: pd.DataFra
     except gspread.WorksheetNotFound:
         ws = sh.add_worksheet(title=tab_name, rows=1000, cols=max(10, new_df.shape[1] + 2))
 
-    # read existing
     existing_vals = ws.get_all_values()
     if not existing_vals:
         existing_df = pd.DataFrame()
@@ -773,41 +964,28 @@ def upsert_append_by_month_year(sheet_id: str, tab_name: str, new_df: pd.DataFra
         existing_df = pd.DataFrame(rows, columns=headers)
         existing_df.columns = [str(c).strip() for c in existing_df.columns]
 
-    # clean new_df
     df_new = new_df.copy().replace([pd.NA, float("inf"), float("-inf")], "")
     df_new = df_new.where(pd.notnull(df_new), "")
 
-    # If sheet has no data yet -> just write
     if existing_df.empty:
         out_df = df_new
     else:
-        # Ensure columns alignment:
-        # Use existing header order; add any missing columns to either side.
-        for c in existing_df.columns:
-            if c not in df_new.columns:
-                df_new[c] = ""
-        for c in df_new.columns:
-            if c not in existing_df.columns:
-                existing_df[c] = ""
-
-        # reorder to existing column order + any new extra cols at end
-        existing_cols = list(existing_df.columns)
-        extra_cols = [c for c in df_new.columns if c not in existing_cols]
-        final_cols = existing_cols + extra_cols
-
-        existing_df = existing_df[final_cols]
-        df_new = df_new[final_cols]
+        existing_df, df_new = _align_columns(existing_df, df_new)
 
         existing_df = _normalize_month_year_for_compare(existing_df)
         df_new = _normalize_month_year_for_compare(df_new)
+        existing_df = _normalize_customer_name_for_compare(existing_df)
+        df_new = _normalize_customer_name_for_compare(df_new)
 
-        if month and year and ("Month" in existing_df.columns) and ("Year" in existing_df.columns):
-            mask_same = (existing_df["Month"] == month) & (existing_df["Year"] == year)
-            existing_df = existing_df.loc[~mask_same].copy()
+        if month and year and {"Year", "Month"}.issubset(existing_df.columns):
+            mask_same_batch = (
+                (existing_df["Year"].astype(str).str.strip() == year) &
+                (existing_df["Month"].astype(str).str.upper() == month)
+            )
+            existing_df = existing_df.loc[~mask_same_batch].copy()
 
         out_df = pd.concat([existing_df, df_new], ignore_index=True)
 
-    # write back (whole tab)
     out_df = out_df.where(pd.notnull(out_df), "")
     values = [out_df.columns.tolist()] + out_df.astype(object).values.tolist()
 
@@ -1122,18 +1300,35 @@ def main():
     print(f"{DEST_SHEET_NAME} rows: {len(df_final)}")
     print(f"{PIVOT_SHEET_NAME} rows: {len(pivot_df)}")
 
-    # Push ONLY pivot to REC_STK sheet/tab with append/replace-by-month-year
     load_dotenv()
-    target_sheet_id = env_clean(os.getenv("REC_STK_SHEET_ID", ""))
-    target_tab_name = env_clean(os.getenv("REC_STK_TAB_NAME", ""))
 
-    if not target_sheet_id or not target_tab_name:
-        print("REC_STK_SHEET_ID or REC_STK_TAB_NAME missing in .env. Skipping push.")
-        return
+    # 1) Push pivot
+    pivot_sheet_id = env_clean(os.getenv("REC_STK_SHEET_ID", ""))
+    pivot_tab_name = env_clean(os.getenv("REC_STK_TAB_NAME", ""))
 
-    print(f"Upsert/append pivot to Google Sheet tab '{target_tab_name}' (Month={month}, Year={year}) ...")
-    upsert_append_by_month_year(target_sheet_id, target_tab_name, pivot_df, month, year)
-    print("Google Sheet update done.")
+    if not pivot_sheet_id or not pivot_tab_name:
+        print("REC_STK_SHEET_ID or REC_STK_TAB_NAME missing in .env. Skipping pivot push.")
+    else:
+        print(
+            f"Upsert/append pivot to Google Sheet tab '{pivot_tab_name}' "
+            f"using Year+Month+Customer Name (Month={month}, Year={year}) ..."
+        )
+        upsert_append_by_month_year_customer(pivot_sheet_id, pivot_tab_name, pivot_df, month, year)
+        print("Pivot Google Sheet update done.")
+
+    # 2) Push base
+    base_sheet_id = env_clean(os.getenv("REC_STK_BASE_SHEET_ID", ""))
+    base_tab_name = env_clean(os.getenv("REC_STK_BASE_TAB_NAME", ""))
+
+    if not base_sheet_id or not base_tab_name:
+        print("REC_STK_BASE_SHEET_ID or REC_STK_BASE_TAB_NAME missing in .env. Skipping base push.")
+    else:
+        print(
+            f"Replace/append base data to Google Sheet tab '{base_tab_name}' "
+            f"using full batch replacement by Year+Month (Month={month}, Year={year}) ..."
+        )
+        replace_batch_by_month_year(base_sheet_id, base_tab_name, df_final, month, year)
+        print("Base Google Sheet update done.")
 
 if __name__ == "__main__":
     main()

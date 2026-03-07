@@ -1,5 +1,8 @@
 pandas
+numpy
 openpyxl
+xlsxwriter
+xlrd
 python-dotenv
 gspread
 google-auth

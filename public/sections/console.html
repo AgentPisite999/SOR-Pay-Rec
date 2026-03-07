@@ -1,8 +1,4 @@
-<!-- FILE: public/sections/console.html (FULL UPDATED)
-✅ Adds themed "lock overlay" on LEFT config card only
-✅ Prevents user from changing agent/files/month-year while job is running
-✅ Keeps your existing UI/IDs intact
--->
+<!-- FILE: public/sections/console.html -->
 
 <div class="page-wrap" id="page-console" style="animation: fadeUp 0.3s ease both">
 
@@ -12,8 +8,106 @@
       <div class="page-subtitle">Select an AI agent · Upload files · Execute run</div>
     </div>
     <div class="page-actions">
-      <button class="btn btn-ghost" id="btnClearAll" type="button">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 .49-3.51"/></svg>
+      <button
+        class="btn btn-ghost"
+        id="btnClearAll"
+        type="button"
+        onclick="
+          var hintEl = document.getElementById('progressHint');
+          var hint = (hintEl && hintEl.textContent ? hintEl.textContent : '').trim().toLowerCase();
+          var stillRunning =
+            hint === 'uploading…' ||
+            hint === 'uploading...' ||
+            hint === 'queued…' ||
+            hint === 'queued...' ||
+            hint === 'preparing…' ||
+            hint === 'preparing...' ||
+            hint === 'running…' ||
+            hint === 'running...' ||
+            hint === 'processing…' ||
+            hint === 'processing...' ||
+            hint === 'reconnecting…' ||
+            hint === 'reconnecting...';
+
+          if (stillRunning) {
+            alert('Agent is running');
+            return;
+          }
+
+          if (window.__pollTimer) {
+            clearInterval(window.__pollTimer);
+            window.__pollTimer = null;
+          }
+
+          window.__job = { id: null, agent: null };
+          window.__consoleRunning = false;
+
+          var el;
+
+          el = document.getElementById('logContent');
+          if (el) el.textContent = '';
+
+          el = document.getElementById('outList');
+          if (el) el.innerHTML = '<div class=&quot;outputs-empty&quot;>— No outputs yet —</div>';
+
+          el = document.getElementById('files');
+          try { if (el) el.value = ''; } catch(e) {}
+
+          el = document.getElementById('fileZone');
+          if (el) {
+            el.classList.remove('has-files');
+            el.classList.remove('locked');
+          }
+
+          el = document.getElementById('fileStatus');
+          if (el) el.textContent = '';
+
+          el = document.getElementById('agentSelect');
+          if (el) el.value = '';
+
+          el = document.getElementById('month');
+          if (el) el.value = '';
+
+          el = document.getElementById('year');
+          if (el) el.value = '';
+
+          el = document.getElementById('pillMode');
+          if (el) el.textContent = 'MODE: —';
+
+          el = document.getElementById('pillOutput');
+          if (el) el.textContent = 'OUT: —';
+
+          el = document.getElementById('monthYearBox');
+          if (el) el.classList.add('hidden');
+
+          el = document.getElementById('progressPct');
+          if (el) el.textContent = '0%';
+
+          el = document.getElementById('progressFill');
+          if (el) el.style.width = '0%';
+
+          el = document.getElementById('progressHint');
+          if (el) el.textContent = 'Idle';
+
+          el = document.getElementById('consoleLock');
+          if (el) {
+            el.classList.remove('show');
+            el.setAttribute('aria-hidden', 'true');
+          }
+
+          ['agentSelect','files','month','year','btnClear','btnClearAll'].forEach(function(id){
+            var x = document.getElementById(id);
+            if (x) x.disabled = false;
+          });
+
+          el = document.getElementById('btnRun');
+          if (el) el.disabled = true;
+        "
+      >
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="1 4 1 10 7 10"/>
+          <path d="M3.51 15a9 9 0 1 0 .49-3.51"/>
+        </svg>
         Reset
       </button>
     </div>
@@ -21,26 +115,27 @@
 
   <div class="console-grid">
 
-    <!-- ─── LEFT: CONTROLS ─── -->
-    <!-- ✅ Added class console-config-wrap so overlay can cover only this card -->
     <div class="card console-config-wrap">
       <div class="card-header">
         <div class="card-title-row">
           <div class="card-icon">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+              <path d="M2 17l10 5 10-5"/>
+              <path d="M2 12l10 5 10-5"/>
+            </svg>
           </div>
           <span class="card-title">Agent Configuration</span>
         </div>
       </div>
 
       <div class="card-body">
-        <!-- Agent selector -->
+
         <div class="field">
           <label class="field-label" for="agentSelect">Select Agent</label>
           <select class="field-select" id="agentSelect"></select>
         </div>
 
-        <!-- Meta pills -->
         <div class="meta-row">
           <div class="meta-pill active" id="pillMode">MODE: —</div>
           <div class="meta-pill active" id="pillOutput">OUT: —</div>
@@ -48,25 +143,25 @@
 
         <div class="divider"></div>
 
-        <!-- File upload -->
         <div class="field">
           <label class="field-label" id="fileLabel">Input File(s)</label>
-
           <div class="file-zone" id="fileZone">
             <input type="file" id="files" />
             <div class="file-zone-inner">
               <div class="file-zone-icon">
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+                  <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                  <polyline points="17 8 12 3 7 8"/>
+                  <line x1="12" y1="3" x2="12" y2="15"/>
+                </svg>
               </div>
               <div class="file-zone-label" id="fileZoneLabel">Drop file here or <span>browse</span></div>
               <div class="file-zone-sub" id="fileZoneSub">Single file · .xlsx / .csv</div>
             </div>
           </div>
-
           <div class="field-hint" id="fileStatus"></div>
         </div>
 
-        <!-- Month / Year (hidden by default) -->
         <div class="month-year-box hidden" id="monthYearBox">
           <div class="month-year-grid">
             <div class="field" style="margin:0">
@@ -97,20 +192,23 @@
 
         <div class="divider"></div>
 
-        <!-- Actions -->
         <div class="btn-actions">
           <button class="btn btn-primary" id="btnRun" type="button">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
             Execute Run
           </button>
           <button class="btn btn-ghost" id="btnClear" type="button">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
             Clear
           </button>
         </div>
 
-        <!-- Progress -->
-        <div class="progress-section">
+        <div class="progress-section" id="progressSection">
           <div class="progress-header">
             <span class="progress-label">Progress</span>
             <span class="progress-val" id="progressPct">0%</span>
@@ -123,32 +221,29 @@
 
       </div>
 
-      <!-- ✅ LOCK OVERLAY (covers ONLY this left card) -->
-      <div id="consoleLock" class="console-lock" style="display:none" aria-hidden="true">
+      <div id="consoleLock" class="console-lock" aria-hidden="true">
         <div class="console-lock-inner">
           <div class="loader-ring"></div>
           <div class="console-lock-title">Processing…</div>
-          <div class="console-lock-sub">
-            Please wait while the agent runs. Logs will continue updating.
-          </div>
+          <div class="console-lock-sub">Agent is running · Check logs on the right</div>
         </div>
       </div>
     </div>
 
-    <!-- ─── RIGHT: LOGS + OUTPUTS ─── -->
     <div style="display:flex; flex-direction:column; gap:16px">
 
-      <!-- Run Log -->
       <div class="card" style="flex:1">
         <div class="card-header">
           <div class="card-title-row">
             <div class="card-icon">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/>
+                <path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/>
+              </svg>
             </div>
             <span class="card-title">Run Logs</span>
           </div>
         </div>
-
         <div class="log-box">
           <div class="log-header">
             <span class="log-title">stdout</span>
@@ -162,17 +257,19 @@
         </div>
       </div>
 
-      <!-- Outputs -->
       <div class="card">
         <div class="card-header">
           <div class="card-title-row">
             <div class="card-icon">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/>
+                <polyline points="7 10 12 15 17 10"/>
+                <line x1="12" y1="15" x2="12" y2="3"/>
+              </svg>
             </div>
             <span class="card-title">Output Files</span>
           </div>
         </div>
-
         <div class="card-body">
           <div class="outputs-list" id="outList">
             <div class="outputs-empty">— No outputs yet —</div>
@@ -191,38 +288,63 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-/* ✅ overlay styles */
-.console-config-wrap{ position:relative; }
-.console-lock{
-  position:absolute;
-  inset:0;
-  background: rgba(10,10,10,0.55);
-  backdrop-filter: blur(6px);
-  border-radius: 18px; /* match your card radius */
-  display:flex;
-  align-items:center;
-  justify-content:center;
+.console-config-wrap {
+  position: relative;
+  overflow: visible;
+}
+
+#progressSection {
+  position: relative;
+  z-index: 60;
+}
+
+.console-lock {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 92px;
+  background: rgba(10, 10, 10, 0.62);
+  backdrop-filter: blur(5px);
+  -webkit-backdrop-filter: blur(5px);
+  border-radius: 12px 12px 0 0;
   z-index: 50;
+  -webkit-mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+  mask-image: linear-gradient(to bottom, black 80%, transparent 100%);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
 }
-.console-lock-inner{
-  display:flex;
-  flex-direction:column;
-  align-items:center;
-  gap:10px;
-  text-align:center;
-  padding:20px;
+
+.console-lock.show {
+  display: flex;
+  opacity: 1;
+  pointer-events: all;
 }
-.console-lock-title{
+
+.console-lock-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  padding: 24px 20px;
+}
+
+.console-lock-title {
   font-family: "Syne", sans-serif;
+  font-size: 15px;
   font-weight: 800;
   letter-spacing: .02em;
-  color: rgba(240,237,232,.92);
+  color: rgba(240, 237, 232, .95);
 }
-.console-lock-sub{
+
+.console-lock-sub {
   font-family: "JetBrains Mono", monospace;
   font-size: 11px;
-  color: rgba(240,237,232,.55);
-  max-width: 340px;
+  color: rgba(240, 237, 232, .5);
   line-height: 1.6;
 }
 </style>

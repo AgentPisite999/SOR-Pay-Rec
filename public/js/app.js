@@ -1,643 +1,1413 @@
-// =========================
-// FILE: public/js/app.js  (FULL UPDATED FINAL)
-// ✅ Fix: DONE/ERROR handled only once (no "Completed." spam)
-// ✅ Fix: stop polling immediately on terminal states
-// ✅ Fix: resume polling without duplicating old logs
-// ✅ Adds: "— Select Agent —" placeholder
-// ✅ Keeps: lock overlay + polling survives tab switching
-// ✅ After DONE/ERROR: keeps agent selected, clears files/month/year for next run
-// ✅ NEW: Top-right Reset does FULL CONSOLE refresh (page reload) when not running
-// =========================
+
+// // FILE: public/js/app.js
+
+// window.__sectionInit = window.__sectionInit || {};
+// window.__job = window.__job || { id: null, agent: null };
+// window.__pollTimer = window.__pollTimer || null;
+// window.__consoleRunning = window.__consoleRunning || false;
+
+// window.toast = window.toast || function (msg, type) {
+//   var el = document.getElementById("toast");
+//   if (!el) return;
+//   el.textContent = msg;
+//   el.className = "toast show" + (type ? " toast-" + type : "");
+//   clearTimeout(window.__toastT);
+//   window.__toastT = setTimeout(function () {
+//     el.classList.remove("show");
+//   }, 2800);
+// };
+
+// async function hydrateUserChip() {
+//   try {
+//     var res = await fetch("/me", { cache: "no-store", credentials: "include" });
+//     if (!res.ok) return;
+//     var d = await res.json();
+//     if (!d.ok || !d.user) return;
+//     var dn = d.user.displayName || d.user.name || d.user.email || "User";
+//     var e;
+//     e = document.getElementById("userName");
+//     if (e) e.textContent = dn;
+//     e = document.getElementById("userEmail");
+//     if (e) e.textContent = d.user.email || "—";
+//     e = document.getElementById("userAvatar");
+//     if (e) e.textContent = dn.trim()[0].toUpperCase();
+//   } catch (e) {}
+// }
+// document.addEventListener("DOMContentLoaded", hydrateUserChip);
+
+// function stopPolling() {
+//   if (window.__pollTimer) {
+//     clearInterval(window.__pollTimer);
+//     window.__pollTimer = null;
+//   }
+// }
+
+// // ═══════════════════════════════════════════════════════════════
+// window.__sectionInit.console = function () {
+// // ═══════════════════════════════════════════════════════════════
+
+//   var PROJECTS = {};
+//   var finished = false;
+
+//   function g(id) {
+//     return document.getElementById(id);
+//   }
+
+//   function safe(s) {
+//     return String(s || "").replace(/[&<>"']/g, function (c) {
+//       return {
+//         "&": "&amp;",
+//         "<": "&lt;",
+//         ">": "&gt;",
+//         '"': "&quot;",
+//         "'": "&#039;"
+//       }[c];
+//     });
+//   }
+
+//   function showOverlay() {
+//     var ov = g("consoleLock");
+//     if (!ov) return;
+//     ov.classList.add("show");
+//     ov.setAttribute("aria-hidden", "false");
+//   }
+
+//   function hideOverlay() {
+//     var ov = g("consoleLock");
+//     if (!ov) return;
+//     ov.classList.remove("show");
+//     ov.setAttribute("aria-hidden", "true");
+//   }
+
+//   function setProgress(pct, hint) {
+//     pct = Math.max(0, Math.min(100, Number(pct) || 0));
+//     var p = g("progressPct");
+//     if (p) p.textContent = pct + "%";
+//     var f = g("progressFill");
+//     if (f) f.style.width = pct + "%";
+//     var h = g("progressHint");
+//     if (h) h.textContent = hint || "";
+//   }
+
+//   function logLine(txt, type) {
+//     var box = g("logContent");
+//     if (!box) return;
+//     var pre = type === "ok" ? "✓ " : type === "err" ? "✗ " : "→ ";
+//     box.textContent += pre + txt + "\n";
+//     box.scrollTop = box.scrollHeight;
+//   }
+
+//   function renderOutputs(outputs) {
+//     var ol = g("outList");
+//     if (!ol) return;
+
+//     if (!outputs || !outputs.length) {
+//       ol.innerHTML = '<div class="outputs-empty">Run complete — check Base Dump for files.</div>';
+//       return;
+//     }
+
+//     ol.innerHTML = outputs.map(function (f) {
+//       var url = "https://drive.google.com/file/d/" + f.id + "/view";
+//       return '<a class="out-link" target="_blank" rel="noreferrer" href="' + url + '">' + safe(f.name) + "</a>";
+//     }).join("");
+//   }
+
+//   function lockAll() {
+//     window.__consoleRunning = true;
+
+//     ["agentSelect", "files", "month", "year", "btnClear", "btnClearAll"].forEach(function (id) {
+//       var e = g(id);
+//       if (e) e.disabled = true;
+//     });
+
+//     var bRun = g("btnRun");
+//     if (bRun) bRun.disabled = true;
+
+//     var fz = g("fileZone");
+//     if (fz) fz.classList.add("locked");
+
+//     showOverlay();
+//   }
+
+//   function unlockAll() {
+//     stopPolling();
+
+//     window.__job = { id: null, agent: null };
+//     window.__consoleRunning = false;
+
+//     ["agentSelect", "files", "month", "year", "btnClear", "btnClearAll"].forEach(function (id) {
+//       var e = g(id);
+//       if (e) e.disabled = false;
+//     });
+
+//     var fz = g("fileZone");
+//     if (fz) fz.classList.remove("locked");
+
+//     hideOverlay();
+//     syncBtn();
+//   }
+
+//   function syncBtn() {
+//     var bRun = g("btnRun");
+//     if (!bRun) return;
+
+//     var agOk = !!(g("agentSelect") && g("agentSelect").value);
+//     var fi = g("files");
+//     var fiOk = !!(fi && fi.files && fi.files.length);
+
+//     bRun.disabled = !!(window.__job.id) || !agOk || !fiOk;
+//   }
+
+//   function norm(s) {
+//     return String(s || "").trim().toLowerCase();
+//   }
+
+//   function isRunning(s) {
+//     var v = norm(s);
+//     return v === "running" || v === "queued" || v === "processing" || v === "started" || v === "preparing";
+//   }
+
+//   function isUploading(s) {
+//     return norm(s) === "uploading";
+//   }
+
+//   function isDone(s) {
+//     var v = norm(s);
+//     return v === "done" || v === "completed" || v === "complete" || v === "success" || v === "finished";
+//   }
+
+//   function isError(s) {
+//     var v = norm(s);
+//     return v === "error" || v === "failed" || v === "fail" || v === "err";
+//   }
+
+//   function finishRun(wasError, outputs) {
+//     if (finished) return;
+//     finished = true;
+
+//     stopPolling();
+//     window.__consoleRunning = false;
+//     hideOverlay();
+
+//     if (wasError) {
+//       setProgress(0, "Failed");
+//       logLine("Run failed.", "err");
+//       window.toast("Agent failed", "err");
+//     } else {
+//       setProgress(100, "Completed");
+//       renderOutputs(outputs || []);
+//       logLine("Done! Ready for next run.", "ok");
+//       window.toast("✓ Run complete");
+//     }
+
+//     try {
+//       var fi = g("files");
+//       if (fi) fi.value = "";
+//     } catch (e) {}
+
+//     var fz = g("fileZone");
+//     if (fz) fz.classList.remove("has-files");
+
+//     var fs = g("fileStatus");
+//     if (fs) fs.textContent = "";
+
+//     unlockAll();
+//   }
+
+//   function startWatching(jobId) {
+//     stopPolling();
+
+//     var logsSeen = 0;
+//     var doneAt = null;
+//     var errCount = 0;
+
+//     window.__pollTimer = setInterval(function () {
+//       if (finished) {
+//         stopPolling();
+//         return;
+//       }
+
+//       if (!window.__job.id) {
+//         stopPolling();
+//         return;
+//       }
+
+//       fetch("/api/job-status?jobId=" + encodeURIComponent(jobId), {
+//         cache: "no-store",
+//         credentials: "include"
+//       })
+//         .then(function (r) {
+//           if (finished) return;
+
+//           if (r.status === 404) {
+//             var logText = ((g("logContent") || {}).textContent || "").toLowerCase();
+//             var ok = logText.includes("✓ completed") ||
+//                      logText.includes("upsert complete") ||
+//                      logText.includes("run completed") ||
+//                      logText.includes("done! ready for next run.");
+//             finishRun(!ok, []);
+//             return Promise.reject("stop");
+//           }
+
+//           return r.json();
+//         })
+//         .then(function (data) {
+//           if (finished) return;
+//           if (!data) return;
+
+//           if (!data.ok) {
+//             var msg = String(data.error || "").toLowerCase();
+//             if (msg.includes("not found") || msg.includes("job")) {
+//               var logText = ((g("logContent") || {}).textContent || "").toLowerCase();
+//               var ok = logText.includes("✓ completed") ||
+//                        logText.includes("upsert complete") ||
+//                        logText.includes("run completed") ||
+//                        logText.includes("done! ready for next run.");
+//               finishRun(!ok, []);
+//             }
+//             return;
+//           }
+
+//           errCount = 0;
+//           var status = String(data.status || "").trim();
+
+//           var logs = Array.isArray(data.logs) ? data.logs : [];
+//           if (logs.length > logsSeen) {
+//             logs.slice(logsSeen).forEach(function (line) {
+//               logLine(line, "info");
+//             });
+//             logsSeen = logs.length;
+//           }
+
+//           if (typeof data.pct === "number") {
+//             setProgress(data.pct, data.hint || "");
+//           }
+
+//           if (isDone(status)) {
+//             finishRun(false, data.outputs);
+//             return;
+//           }
+
+//           if (isError(status) || data.error) {
+//             finishRun(true, []);
+//             return;
+//           }
+
+//           if (isRunning(status) || isUploading(status)) {
+//             return;
+//           }
+
+//           var lastLog = logs.length ? String(logs[logs.length - 1] || "").toLowerCase() : "";
+//           var logDone =
+//             lastLog.includes("✓ completed") ||
+//             lastLog.includes("upsert complete") ||
+//             lastLog.includes("run completed") ||
+//             lastLog.includes("run finished") ||
+//             lastLog.includes("done! ready for next run.");
+
+//           if (logDone && !doneAt) doneAt = Date.now();
+//           if (doneAt && (Date.now() - doneAt) > 3000) {
+//             finishRun(false, data.outputs || []);
+//           }
+//         })
+//         .catch(function (e) {
+//           if (e === "stop" || finished) return;
+
+//           errCount++;
+//           if (errCount >= 5) {
+//             var logText = ((g("logContent") || {}).textContent || "").toLowerCase();
+//             var ok = logText.includes("✓ completed") ||
+//                      logText.includes("upsert complete") ||
+//                      logText.includes("done! ready for next run.");
+//             finishRun(!ok, []);
+//           } else {
+//             setProgress(0, "Reconnecting…");
+//           }
+//         });
+//     }, 1500);
+//   }
+
+//   function needsMY(name) {
+//     return name === "Receivable Stock" || name === "Receivable Trade Discount";
+//   }
+
+//   function applyAgent(name) {
+//     var pm = g("pillMode");
+//     var po = g("pillOutput");
+//     var myb = g("monthYearBox");
+
+//     if (!name || !PROJECTS[name]) {
+//       if (pm) pm.textContent = "MODE: —";
+//       if (po) po.textContent = "OUT: —";
+//       if (myb) myb.classList.add("hidden");
+//       return;
+//     }
+
+//     var cfg = PROJECTS[name];
+//     var single = cfg.mode === "single";
+
+//     if (pm) pm.textContent = "MODE: " + String(cfg.mode || "").toUpperCase();
+//     if (po) po.textContent = "OUT: " + (cfg.outputName || "—");
+
+//     var fi = g("files");
+//     if (fi) fi.multiple = !single;
+
+//     var lbl = g("fileZoneLabel");
+//     if (lbl) {
+//       lbl.innerHTML = single
+//         ? "Drop file here or <span>browse</span>"
+//         : "Drop files here or <span>browse</span>";
+//     }
+
+//     var sub = g("fileZoneSub");
+//     if (sub) {
+//       sub.textContent = single
+//         ? "Single file · .xlsx / .csv"
+//         : "Multiple files · .xlsx / .csv";
+//     }
+
+//     if (myb) {
+//       if (needsMY(name)) {
+//         myb.classList.remove("hidden");
+//         var yr = g("year");
+//         if (yr && !yr.value) yr.value = String(new Date().getFullYear());
+//       } else {
+//         myb.classList.add("hidden");
+//       }
+//     }
+//   }
+
+//   async function loadAgents() {
+//     try {
+//       var res = await fetch("/projects", { cache: "no-store", credentials: "include" });
+//       if (!res.ok) {
+//         logLine("Failed to load agents: HTTP " + res.status, "err");
+//         return;
+//       }
+
+//       PROJECTS = await res.json();
+
+//       var sel = g("agentSelect");
+//       if (!sel) return;
+
+//       sel.innerHTML = "";
+
+//       var ph = document.createElement("option");
+//       ph.value = "";
+//       ph.textContent = "— Select Agent —";
+//       sel.appendChild(ph);
+
+//       Object.keys(PROJECTS).forEach(function (name) {
+//         var opt = document.createElement("option");
+//         opt.value = name;
+//         opt.textContent = name;
+//         sel.appendChild(opt);
+//       });
+
+//       if (window.__job.agent) {
+//         sel.value = window.__job.agent;
+//         applyAgent(sel.value);
+//       } else {
+//         applyAgent("");
+//       }
+
+//       syncBtn();
+//     } catch (e) {
+//       logLine("Network error: " + e.message, "err");
+//     }
+//   }
+
+//   async function runAgent() {
+//     if (window.__job.id) return;
+
+//     var sel = g("agentSelect");
+//     if (!sel || !sel.value) {
+//       window.toast("Select an agent", "err");
+//       return;
+//     }
+
+//     var fi = g("files");
+//     if (!fi || !fi.files || !fi.files.length) {
+//       window.toast("Select a file", "err");
+//       return;
+//     }
+
+//     var agentName = sel.value;
+//     var month = ((g("month") && g("month").value) || "").trim();
+//     var year = ((g("year") && g("year").value) || "").trim();
+
+//     if (needsMY(agentName) && (!month || !year)) {
+//       window.toast("Month/Year required", "err");
+//       return;
+//     }
+
+//     finished = false;
+
+//     var lc = g("logContent");
+//     if (lc) lc.textContent = "";
+
+//     var ol = g("outList");
+//     if (ol) ol.innerHTML = '<div class="outputs-empty">— Running… —</div>';
+
+//     setProgress(2, "Uploading…");
+//     lockAll();
+
+//     logLine("Agent: " + agentName, "info");
+//     if (needsMY(agentName)) logLine("Period: " + month + " / " + year, "info");
+//     logLine("Files: " + fi.files.length + " file(s)", "info");
+//     logLine("Starting...", "info");
+
+//     var fd = new FormData();
+//     for (var i = 0; i < fi.files.length; i++) {
+//       fd.append("files", fi.files[i]);
+//     }
+
+//     if (needsMY(agentName)) {
+//       fd.append("month", month);
+//       fd.append("year", year);
+//     }
+
+//     try {
+//       var res = await fetch("/run/" + encodeURIComponent(agentName), {
+//         method: "POST",
+//         body: fd,
+//         credentials: "include"
+//       });
+
+//       var data = await res.json();
+
+//       if (!data.ok || !data.jobId) {
+//         logLine("Error: " + (data.error || "No jobId"), "err");
+//         window.toast("Failed to start", "err");
+//         finished = true;
+//         unlockAll();
+//         return;
+//       }
+
+//       window.__job = { id: data.jobId, agent: agentName };
+//       window.__consoleRunning = true;
+
+//       logLine("Job started: " + data.jobId, "ok");
+//       setProgress(5, "Queued…");
+//       startWatching(data.jobId);
+//     } catch (e) {
+//       logLine("Network error: " + e.message, "err");
+//       window.toast("Network error", "err");
+//       finished = true;
+//       unlockAll();
+//     }
+//   }
+
+//   var fzEl = g("fileZone");
+//   var fiEl = g("files");
+
+//   if (fzEl && fiEl) {
+//     fzEl.addEventListener("dragover", function (e) {
+//       if (!fzEl.classList.contains("locked")) {
+//         e.preventDefault();
+//         fzEl.classList.add("drag-over");
+//       }
+//     });
+
+//     fzEl.addEventListener("dragleave", function () {
+//       fzEl.classList.remove("drag-over");
+//     });
+
+//     fzEl.addEventListener("drop", function (e) {
+//       if (fzEl.classList.contains("locked")) return;
+
+//       e.preventDefault();
+//       fzEl.classList.remove("drag-over");
+
+//       if (e.dataTransfer && e.dataTransfer.files.length) {
+//         var dt = new DataTransfer();
+//         Array.from(e.dataTransfer.files).forEach(function (f) {
+//           dt.items.add(f);
+//         });
+//         fiEl.files = dt.files;
+//         updateFileUI();
+//       }
+//     });
+
+//     fiEl.addEventListener("change", updateFileUI);
+//   }
+
+//   function updateFileUI() {
+//     var fi = g("files");
+//     var fz = g("fileZone");
+//     var fs = g("fileStatus");
+//     var lbl = g("fileZoneLabel");
+
+//     if (!fi || !fi.files || !fi.files.length) {
+//       if (fz) fz.classList.remove("has-files");
+//       if (fs) fs.textContent = "";
+//       applyAgent((g("agentSelect") || {}).value || "");
+//       syncBtn();
+//       return;
+//     }
+
+//     if (fz) fz.classList.add("has-files");
+
+//     var names = Array.from(fi.files).map(function (f) {
+//       return f.name;
+//     }).join(", ");
+
+//     if (fs) fs.textContent = fi.files.length === 1 ? names : fi.files.length + " files selected";
+
+//     if (lbl) {
+//       lbl.innerHTML = fi.files.length === 1
+//         ? '<span style="color:var(--green)">' + safe(names) + "</span>"
+//         : '<span style="color:var(--green)">' + fi.files.length + " files selected</span>";
+//     }
+
+//     syncBtn();
+//   }
+
+//   var bRun = g("btnRun");
+//   if (bRun) bRun.onclick = runAgent;
+
+//   var bClear = g("btnClear");
+//   if (bClear) {
+//     bClear.onclick = function () {
+//       if (window.__job.id) {
+//         window.toast("Agent is running", "err");
+//         return;
+//       }
+
+//       var lc = g("logContent");
+//       if (lc) lc.textContent = "";
+
+//       var ol = g("outList");
+//       if (ol) ol.innerHTML = '<div class="outputs-empty">— No outputs yet —</div>';
+
+//       setProgress(0, "Idle");
+
+//       try {
+//         var fi = g("files");
+//         if (fi) fi.value = "";
+//       } catch (e) {}
+
+//       var fz = g("fileZone");
+//       if (fz) fz.classList.remove("has-files");
+
+//       var fs = g("fileStatus");
+//       if (fs) fs.textContent = "";
+
+//       applyAgent((g("agentSelect") || {}).value || "");
+//       finished = true;
+//       unlockAll();
+//     };
+//   }
+
+//   var bReset = g("btnClearAll");
+//   if (bReset) {
+//     bReset.onclick = function () {
+//       if (window.__job.id) {
+//         window.toast("Agent is running", "err");
+//         return;
+//       }
+
+//       var lc = g("logContent");
+//       if (lc) lc.textContent = "";
+
+//       var ol = g("outList");
+//       if (ol) ol.innerHTML = '<div class="outputs-empty">— No outputs yet —</div>';
+
+//       setProgress(0, "Idle");
+
+//       try {
+//         var fi = g("files");
+//         if (fi) fi.value = "";
+//       } catch (e) {}
+
+//       var fz = g("fileZone");
+//       if (fz) fz.classList.remove("has-files");
+
+//       var fs = g("fileStatus");
+//       if (fs) fs.textContent = "";
+
+//       var sel = g("agentSelect");
+//       if (sel) sel.value = "";
+
+//       applyAgent("");
+//       finished = true;
+//       unlockAll();
+//       window.toast("Console reset");
+//     };
+//   }
+
+//   var agSel = g("agentSelect");
+//   if (agSel) {
+//     agSel.onchange = function () {
+//       if (window.__job.id) return;
+
+//       applyAgent(agSel.value);
+
+//       try {
+//         var fi = g("files");
+//         if (fi) fi.value = "";
+//       } catch (e) {}
+
+//       var fz = g("fileZone");
+//       if (fz) fz.classList.remove("has-files");
+
+//       var fs = g("fileStatus");
+//       if (fs) fs.textContent = "";
+
+//       setProgress(0, "Idle");
+//       syncBtn();
+//     };
+//   }
+
+//   if (window.__job && window.__job.id) {
+//     finished = false;
+//     window.__consoleRunning = true;
+//     lockAll();
+//     logLine("Resuming job: " + window.__job.id, "info");
+//     startWatching(window.__job.id);
+//   } else {
+//     window.__job = { id: null, agent: null };
+//     window.__consoleRunning = false;
+//     finished = true;
+//     hideOverlay();
+//     setProgress(0, "Idle");
+//   }
+
+//   if (window.__consoleRunning) showOverlay();
+//   else hideOverlay();
+
+//   loadAgents();
+// };
+
+
+
+
+
+// FILE: public/js/app.js
 
 window.__sectionInit = window.__sectionInit || {};
-window.__consoleRunning = false;
+window.__job = window.__job || { id: null, agent: null };
+window.__pollTimer = window.__pollTimer || null;
+window.__consoleRunning = window.__consoleRunning || false;
+window.toast = window.toast || function(msg){ try { console.log(msg); } catch(e) {} };
 
-// ✅ global job state survives section switches
-// { jobId, agentName, terminalHandled:boolean, lastLogCount:number }
-window.__activeJob = window.__activeJob || null;
-window.__jobPollTimer = window.__jobPollTimer || null;
+window.toast = window.toast || function (msg, type) {
+  var el = document.getElementById("toast");
+  if (!el) return;
+  el.textContent = msg;
+  el.className = "toast show" + (type ? " toast-" + type : "");
+  clearTimeout(window.__toastT);
+  window.__toastT = setTimeout(function () {
+    el.classList.remove("show");
+  }, 2800);
+};
 
-// ─── TOAST ───
-window.toast =
-  window.toast ||
-  function (msg, type) {
-    const el = document.getElementById("toast");
-    if (!el) return;
-    el.textContent = msg;
-    el.className = "toast show" + (type ? " toast-" + type : "");
-    clearTimeout(window.__toastTimer);
-    window.__toastTimer = setTimeout(() => el.classList.remove("show"), 2400);
-  };
-
-// ─── USER CHIP ───
 async function hydrateUserChip() {
-  const nameEl = document.getElementById("userName");
-  const emailEl = document.getElementById("userEmail");
-  const avatarEl = document.getElementById("userAvatar");
-  if (!nameEl || !emailEl || !avatarEl) return;
-
   try {
-    const res = await fetch("/me", { cache: "no-store", credentials: "include" });
+    var res = await fetch("/me", { cache: "no-store", credentials: "include" });
     if (!res.ok) return;
-    const ct = res.headers.get("content-type") || "";
-    if (!ct.includes("application/json")) return;
-
-    const data = await res.json();
-    if (!data?.ok || !data?.user) return;
-
-    const u = data.user;
-    const dn = u.displayName || u.name || u.email || "User";
-    const em = u.email || "—";
-
-    nameEl.textContent = dn;
-    emailEl.textContent = em;
-    avatarEl.textContent = String(dn).trim().charAt(0).toUpperCase() || "U";
-  } catch {}
+    var d = await res.json();
+    if (!d.ok || !d.user) return;
+    var dn = d.user.displayName || d.user.name || d.user.email || "User";
+    var e;
+    e = document.getElementById("userName");
+    if (e) e.textContent = dn;
+    e = document.getElementById("userEmail");
+    if (e) e.textContent = d.user.email || "—";
+    e = document.getElementById("userAvatar");
+    if (e) e.textContent = dn.trim()[0].toUpperCase();
+  } catch (e) {}
 }
 document.addEventListener("DOMContentLoaded", hydrateUserChip);
 
-// ─────────────────────────────────────────────────────────────
-// ✅ Polling helpers
-// ─────────────────────────────────────────────────────────────
-function stopJobPolling() {
-  if (window.__jobPollTimer) clearInterval(window.__jobPollTimer);
-  window.__jobPollTimer = null;
+function stopPolling() {
+  if (window.__pollTimer) {
+    clearInterval(window.__pollTimer);
+    window.__pollTimer = null;
+  }
 }
 
-async function fetchJobStatus(jobId) {
-  const res = await fetch(`/api/job-status?jobId=${encodeURIComponent(jobId)}`, {
-    cache: "no-store",
-    credentials: "include",
+window.resetConsoleUI = function () {
+  if (window.__job && window.__job.id) {
+    window.toast && window.toast("Agent is running", "err");
+    return;
+  }
+
+  stopPolling();
+  window.__job = { id: null, agent: null };
+  window.__consoleRunning = false;
+
+  var g = function (id) { return document.getElementById(id); };
+
+  var lc = g("logContent");
+  if (lc) lc.textContent = "";
+
+  var ol = g("outList");
+  if (ol) ol.innerHTML = '<div class="outputs-empty">— No outputs yet —</div>';
+
+  try {
+    var fi = g("files");
+    if (fi) fi.value = "";
+  } catch (e) {}
+
+  var fz = g("fileZone");
+  if (fz) {
+    fz.classList.remove("has-files");
+    fz.classList.remove("locked");
+  }
+
+  var fs = g("fileStatus");
+  if (fs) fs.textContent = "";
+
+  var sel = g("agentSelect");
+  if (sel) sel.value = "";
+
+  var month = g("month");
+  if (month) month.value = "";
+
+  var year = g("year");
+  if (year) year.value = "";
+
+  var pm = g("pillMode");
+  if (pm) pm.textContent = "MODE: —";
+
+  var po = g("pillOutput");
+  if (po) po.textContent = "OUT: —";
+
+  var myb = g("monthYearBox");
+  if (myb) myb.classList.add("hidden");
+
+  var pct = g("progressPct");
+  if (pct) pct.textContent = "0%";
+
+  var fill = g("progressFill");
+  if (fill) fill.style.width = "0%";
+
+  var hint = g("progressHint");
+  if (hint) hint.textContent = "Idle";
+
+  var ov = g("consoleLock");
+  if (ov) {
+    ov.classList.remove("show");
+    ov.setAttribute("aria-hidden", "true");
+  }
+
+  ["agentSelect", "files", "month", "year", "btnClear", "btnClearAll"].forEach(function (id) {
+    var el = g(id);
+    if (el) el.disabled = false;
   });
 
-  const ct = res.headers.get("content-type") || "";
-  if (!ct.includes("application/json")) {
-    const txt = await res.text();
-    throw new Error(`job-status not JSON (HTTP ${res.status})\n${txt.slice(0, 200)}`);
-  }
+  var runBtn = g("btnRun");
+  if (runBtn) runBtn.disabled = true;
 
-  const data = await res.json();
-  if (!data.ok) throw new Error(data.error || "job-status ok:false");
-  return data;
-}
+  window.toast && window.toast("Console reset");
+};
 
-function startJobPolling({ jobId, onTick }) {
-  stopJobPolling();
-
-  const tick = async () => {
-    try {
-      const st = await fetchJobStatus(jobId);
-      onTick && onTick(null, st);
-    } catch (e) {
-      onTick && onTick(e, null);
-    }
-  };
-
-  tick();
-  window.__jobPollTimer = setInterval(tick, 1200);
-}
-
-// ─────────────────────────────────────────────────────────────
-// ✅ Status normalization
-// ─────────────────────────────────────────────────────────────
-function normStatus(s) {
-  return String(s || "").trim().toLowerCase();
-}
-function isRunningStatus(s) {
-  const v = normStatus(s);
-  return v === "running" || v === "uploading" || v === "queued" || v === "processing";
-}
-function isDoneStatus(s) {
-  const v = normStatus(s);
-  return v === "done" || v === "completed" || v === "complete" || v === "success" || v === "finished";
-}
-function isErrorStatus(s) {
-  const v = normStatus(s);
-  return v === "error" || v === "failed" || v === "fail";
-}
-
-// ─── CONSOLE SECTION ───
+// ═══════════════════════════════════════════════════════════════
 window.__sectionInit.console = function () {
-  const logContentEl = document.getElementById("logContent");
-  const outListEl = document.getElementById("outList");
-  const progressPctEl = document.getElementById("progressPct");
-  const progressFillEl = document.getElementById("progressFill");
-  const progressHintEl = document.getElementById("progressHint");
+// ═══════════════════════════════════════════════════════════════
 
-  const agentSelect = document.getElementById("agentSelect");
-  const fileInput = document.getElementById("files");
-  const fileZone = document.getElementById("fileZone");
-  const btnRun = document.getElementById("btnRun");
-  const btnClear = document.getElementById("btnClear");
-  const btnClearAll = document.getElementById("btnClearAll"); // ✅ top-right Reset
-  const fileStatus = document.getElementById("fileStatus");
-  const lockEl = document.getElementById("consoleLock");
+  var PROJECTS = {};
+  var finished = false;
 
-  if (!agentSelect || !fileInput || !btnRun || !logContentEl) return;
-
-  const safe = (s) =>
-    String(s || "").replace(/[&<>"']/g, (c) =>
-      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c])
-    );
-
-  const logLine = (t, type) => {
-    const prefix = type === "ok" ? "✓ " : type === "err" ? "✗ " : type === "info" ? "→ " : "  ";
-    logContentEl.textContent += prefix + t + "\n";
-    logContentEl.scrollTop = logContentEl.scrollHeight;
-  };
-
-  const setProgress = (pct, hint) => {
-    const v = Math.max(0, Math.min(100, Number(pct) || 0));
-    if (progressPctEl) progressPctEl.textContent = v + "%";
-    if (progressFillEl) progressFillEl.style.width = v + "%";
-    if (progressHintEl) progressHintEl.textContent = hint || "";
-  };
-
-  const needsMonthYear = (name) => name === "Receivable Stock" || name === "Receivable Trade Discount";
-
-  let PROJECTS = {};
-  let running = false;
-
-  function syncRunButton() {
-    const agentOk = Boolean(agentSelect.value);
-    const filesOk = Boolean(fileInput.files && fileInput.files.length);
-    const locked = Boolean(window.__consoleRunning || window.__activeJob?.jobId);
-    btnRun.disabled = locked || !agentOk || !filesOk;
+  function g(id) {
+    return document.getElementById(id);
   }
 
-  function lockInputs(locked) {
-    if (lockEl) lockEl.style.display = locked ? "flex" : "none";
-
-    agentSelect.disabled = locked;
-    fileInput.disabled = locked;
-
-    const monthEl = document.getElementById("month");
-    const yearEl = document.getElementById("year");
-    if (monthEl) monthEl.disabled = locked;
-    if (yearEl) yearEl.disabled = locked;
-
-    if (btnClear) btnClear.disabled = locked;
-    if (btnClearAll) btnClearAll.disabled = locked;
-
-    if (fileZone) fileZone.classList.toggle("locked", locked);
-
-    syncRunButton();
+  function safe(s) {
+    return String(s || "").replace(/[&<>"']/g, function (c) {
+      return {
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      }[c];
+    });
   }
 
-  function applyAgentUI(agentName) {
-    const pillMode = document.getElementById("pillMode");
-    const pillOutput = document.getElementById("pillOutput");
+  function showOverlay() {
+    var ov = g("consoleLock");
+    if (!ov) return;
+    ov.classList.add("show");
+    ov.setAttribute("aria-hidden", "false");
+  }
 
-    if (!agentName || !PROJECTS[agentName]) {
-      if (pillMode) pillMode.textContent = "MODE: —";
-      if (pillOutput) pillOutput.textContent = "OUT: —";
-      const myBox = document.getElementById("monthYearBox");
-      if (myBox) myBox.classList.add("hidden");
+  function hideOverlay() {
+    var ov = g("consoleLock");
+    if (!ov) return;
+    ov.classList.remove("show");
+    ov.setAttribute("aria-hidden", "true");
+  }
+
+  function setProgress(pct, hint) {
+    pct = Math.max(0, Math.min(100, Number(pct) || 0));
+    var p = g("progressPct");
+    if (p) p.textContent = pct + "%";
+    var f = g("progressFill");
+    if (f) f.style.width = pct + "%";
+    var h = g("progressHint");
+    if (h) h.textContent = hint || "";
+  }
+
+  function logLine(txt, type) {
+    var box = g("logContent");
+    if (!box) return;
+    var pre = type === "ok" ? "✓ " : type === "err" ? "✗ " : "→ ";
+    box.textContent += pre + txt + "\n";
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function renderOutputs(outputs) {
+    var ol = g("outList");
+    if (!ol) return;
+
+    if (!outputs || !outputs.length) {
+      ol.innerHTML = '<div class="outputs-empty">Run complete — check Base Dump for files.</div>';
       return;
     }
 
-    const cfg = PROJECTS[agentName];
-    if (pillMode) pillMode.textContent = `MODE: ${String(cfg.mode || "").toUpperCase()}`;
-    if (pillOutput) pillOutput.textContent = `OUT: ${cfg.outputName || "—"}`;
+    ol.innerHTML = outputs.map(function (f) {
+      var url = "https://drive.google.com/file/d/" + f.id + "/view";
+      return '<a class="out-link" target="_blank" rel="noreferrer" href="' + url + '">' + safe(f.name) + "</a>";
+    }).join("");
+  }
 
-    const isSingle = cfg.mode === "single";
-    fileInput.multiple = !isSingle;
+  function lockAll() {
+    window.__consoleRunning = true;
 
-    const fileZoneLabel = document.getElementById("fileZoneLabel");
-    const fileZoneSub = document.getElementById("fileZoneSub");
+    ["agentSelect", "files", "month", "year", "btnClear"].forEach(function (id) {
+      var e = g(id);
+      if (e) e.disabled = true;
+    });
 
-    if (fileZoneLabel)
-      fileZoneLabel.innerHTML = isSingle ? `Drop file here or <span>browse</span>` : `Drop files here or <span>browse</span>`;
+    var bRun = g("btnRun");
+    if (bRun) bRun.disabled = true;
 
-    if (fileZoneSub)
-      fileZoneSub.textContent = isSingle ? "Single file · .xlsx / .csv" : "Multiple files · .xlsx / .csv";
+    var bReset = g("btnClearAll");
+    if (bReset) bReset.disabled = false;
 
-    const myBox = document.getElementById("monthYearBox");
-    if (myBox) {
-      if (needsMonthYear(agentName)) {
-        myBox.classList.remove("hidden");
-        const y = document.getElementById("year");
-        if (y && !y.value) y.value = String(new Date().getFullYear());
+    var fz = g("fileZone");
+    if (fz) fz.classList.add("locked");
+
+    showOverlay();
+  }
+
+  function unlockAll() {
+    stopPolling();
+
+    window.__job = { id: null, agent: null };
+    window.__consoleRunning = false;
+
+    ["agentSelect", "files", "month", "year", "btnClear"].forEach(function (id) {
+      var e = g(id);
+      if (e) e.disabled = false;
+    });
+
+    var bRun = g("btnRun");
+    if (bRun) bRun.disabled = false;
+
+    var bReset = g("btnClearAll");
+    if (bReset) bReset.disabled = false;
+
+    var fz = g("fileZone");
+    if (fz) fz.classList.remove("locked");
+
+    hideOverlay();
+    syncBtn();
+  }
+
+  function syncBtn() {
+    var bRun = g("btnRun");
+    if (!bRun) return;
+
+    var agOk = !!(g("agentSelect") && g("agentSelect").value);
+    var fi = g("files");
+    var fiOk = !!(fi && fi.files && fi.files.length);
+
+    bRun.disabled = !!(window.__job.id) || !agOk || !fiOk;
+  }
+
+  function norm(s) {
+    return String(s || "").trim().toLowerCase();
+  }
+
+  function isRunning(s) {
+    var v = norm(s);
+    return v === "running" || v === "queued" || v === "processing" || v === "started" || v === "preparing";
+  }
+
+  function isUploading(s) {
+    return norm(s) === "uploading";
+  }
+
+  function isDone(s) {
+    var v = norm(s);
+    return v === "done" || v === "completed" || v === "complete" || v === "success" || v === "finished";
+  }
+
+  function isError(s) {
+    var v = norm(s);
+    return v === "error" || v === "failed" || v === "fail" || v === "err";
+  }
+
+  function finishRun(wasError, outputs) {
+    if (finished) return;
+    finished = true;
+
+    stopPolling();
+    window.__consoleRunning = false;
+    hideOverlay();
+
+    if (wasError) {
+      setProgress(0, "Failed");
+      logLine("Run failed.", "err");
+      window.toast("Agent failed", "err");
+    } else {
+      setProgress(100, "Completed");
+      renderOutputs(outputs || []);
+      logLine("Done! Ready for next run.", "ok");
+      window.toast("✓ Run complete");
+    }
+
+    try {
+      var fi = g("files");
+      if (fi) fi.value = "";
+    } catch (e) {}
+
+    var fz = g("fileZone");
+    if (fz) fz.classList.remove("has-files");
+
+    var fs = g("fileStatus");
+    if (fs) fs.textContent = "";
+
+    unlockAll();
+  }
+
+  function startWatching(jobId) {
+    stopPolling();
+
+    var logsSeen = 0;
+    var doneAt = null;
+    var errCount = 0;
+
+    window.__pollTimer = setInterval(function () {
+      if (finished) {
+        stopPolling();
+        return;
+      }
+
+      if (!window.__job.id) {
+        stopPolling();
+        return;
+      }
+
+      fetch("/api/job-status?jobId=" + encodeURIComponent(jobId), {
+        cache: "no-store",
+        credentials: "include"
+      })
+        .then(function (r) {
+          if (finished) return;
+
+          if (r.status === 404) {
+            var logText = ((g("logContent") || {}).textContent || "").toLowerCase();
+            var ok = logText.includes("✓ completed") ||
+                     logText.includes("upsert complete") ||
+                     logText.includes("run completed") ||
+                     logText.includes("done! ready for next run.");
+            finishRun(!ok, []);
+            return Promise.reject("stop");
+          }
+
+          return r.json();
+        })
+        .then(function (data) {
+          if (finished) return;
+          if (!data) return;
+
+          if (!data.ok) {
+            var msg = String(data.error || "").toLowerCase();
+            if (msg.includes("not found") || msg.includes("job")) {
+              var logText = ((g("logContent") || {}).textContent || "").toLowerCase();
+              var ok = logText.includes("✓ completed") ||
+                       logText.includes("upsert complete") ||
+                       logText.includes("run completed") ||
+                       logText.includes("done! ready for next run.");
+              finishRun(!ok, []);
+            }
+            return;
+          }
+
+          errCount = 0;
+          var status = String(data.status || "").trim();
+
+          var logs = Array.isArray(data.logs) ? data.logs : [];
+          if (logs.length > logsSeen) {
+            logs.slice(logsSeen).forEach(function (line) {
+              logLine(line, "info");
+            });
+            logsSeen = logs.length;
+          }
+
+          if (typeof data.pct === "number") {
+            setProgress(data.pct, data.hint || "");
+          }
+
+          if (isDone(status)) {
+            finishRun(false, data.outputs);
+            return;
+          }
+
+          if (isError(status) || data.error) {
+            finishRun(true, []);
+            return;
+          }
+
+          if (isRunning(status) || isUploading(status)) {
+            return;
+          }
+
+          var lastLog = logs.length ? String(logs[logs.length - 1] || "").toLowerCase() : "";
+          var logDone =
+            lastLog.includes("✓ completed") ||
+            lastLog.includes("upsert complete") ||
+            lastLog.includes("run completed") ||
+            lastLog.includes("run finished") ||
+            lastLog.includes("done! ready for next run.");
+
+          if (logDone && !doneAt) doneAt = Date.now();
+          if (doneAt && (Date.now() - doneAt) > 3000) {
+            finishRun(false, data.outputs || []);
+          }
+        })
+        .catch(function (e) {
+          if (e === "stop" || finished) return;
+
+          errCount++;
+          if (errCount >= 5) {
+            var logText = ((g("logContent") || {}).textContent || "").toLowerCase();
+            var ok = logText.includes("✓ completed") ||
+                     logText.includes("upsert complete") ||
+                     logText.includes("done! ready for next run.");
+            finishRun(!ok, []);
+          } else {
+            setProgress(0, "Reconnecting…");
+          }
+        });
+    }, 1500);
+  }
+
+  function needsMY(name) {
+    return name === "Receivable Stock" || name === "Receivable Trade Discount";
+  }
+
+  function applyAgent(name) {
+    var pm = g("pillMode");
+    var po = g("pillOutput");
+    var myb = g("monthYearBox");
+
+    if (!name || !PROJECTS[name]) {
+      if (pm) pm.textContent = "MODE: —";
+      if (po) po.textContent = "OUT: —";
+      if (myb) myb.classList.add("hidden");
+      return;
+    }
+
+    var cfg = PROJECTS[name];
+    var single = cfg.mode === "single";
+
+    if (pm) pm.textContent = "MODE: " + String(cfg.mode || "").toUpperCase();
+    if (po) po.textContent = "OUT: " + (cfg.outputName || "—");
+
+    var fi = g("files");
+    if (fi) fi.multiple = !single;
+
+    var lbl = g("fileZoneLabel");
+    if (lbl) {
+      lbl.innerHTML = single
+        ? "Drop file here or <span>browse</span>"
+        : "Drop files here or <span>browse</span>";
+    }
+
+    var sub = g("fileZoneSub");
+    if (sub) {
+      sub.textContent = single
+        ? "Single file · .xlsx / .csv"
+        : "Multiple files · .xlsx / .csv";
+    }
+
+    if (myb) {
+      if (needsMY(name)) {
+        myb.classList.remove("hidden");
+        var yr = g("year");
+        if (yr && !yr.value) yr.value = String(new Date().getFullYear());
       } else {
-        myBox.classList.add("hidden");
+        myb.classList.add("hidden");
       }
     }
   }
 
-  function renderOutputs(outputs) {
-    if (!outListEl) return;
-    if (!outputs || !outputs.length) {
-      outListEl.innerHTML = `<div class="outputs-empty">No output files found.</div>`;
-      return;
-    }
-    outListEl.innerHTML = outputs
-      .map((f) => {
-        const name = safe(f.name);
-        const url = `https://drive.google.com/file/d/${f.id}/view`;
-        return `<a class="out-link" target="_blank" rel="noreferrer" href="${url}">${name}</a>`;
-      })
-      .join("");
-  }
-
-  function clearActiveJob() {
-    stopJobPolling();
-    window.__activeJob = null;
-    window.__consoleRunning = false;
-    running = false;
-  }
-
-  function resetForNextRunKeepAgent() {
-    // ✅ keep agent, clear only inputs
+  async function loadAgents() {
     try {
-      fileInput.value = "";
-    } catch {}
+      var res = await fetch("/projects", { cache: "no-store", credentials: "include" });
+      if (!res.ok) {
+        logLine("Failed to load agents: HTTP " + res.status, "err");
+        return;
+      }
 
-    if (fileZone) fileZone.classList.remove("has-files");
-    if (fileStatus) fileStatus.textContent = "";
+      PROJECTS = await res.json();
 
-    const monthEl = document.getElementById("month");
-    const yearEl = document.getElementById("year");
-    if (monthEl) monthEl.value = "";
-    if (yearEl) yearEl.value = "";
+      var sel = g("agentSelect");
+      if (!sel) return;
 
-    applyAgentUI(agentSelect.value);
-    syncRunButton();
-  }
+      sel.innerHTML = "";
 
-  async function initAgents() {
-    let res;
-    try {
-      res = await fetch("/projects", { cache: "no-store", credentials: "include" });
+      var ph = document.createElement("option");
+      ph.value = "";
+      ph.textContent = "— Select Agent —";
+      sel.appendChild(ph);
+
+      Object.keys(PROJECTS).forEach(function (name) {
+        var opt = document.createElement("option");
+        opt.value = name;
+        opt.textContent = name;
+        sel.appendChild(opt);
+      });
+
+      if (window.__job.agent) {
+        sel.value = window.__job.agent;
+        applyAgent(sel.value);
+      } else {
+        applyAgent("");
+      }
+
+      syncBtn();
     } catch (e) {
       logLine("Network error: " + e.message, "err");
-      return;
     }
-
-    if (!res.ok) {
-      logLine(`Failed to load agents — HTTP ${res.status}`, "err");
-      return;
-    }
-
-    const ct = res.headers.get("content-type") || "";
-    if (!ct.includes("application/json")) {
-      logLine("Session expired — please reload and login.", "err");
-      return;
-    }
-
-    PROJECTS = await res.json();
-    const keys = Object.keys(PROJECTS || {});
-    agentSelect.innerHTML = "";
-
-    // ✅ placeholder
-    const ph = document.createElement("option");
-    ph.value = "";
-    ph.textContent = "— Select Agent —";
-    agentSelect.appendChild(ph);
-
-    keys.forEach((name) => {
-      const opt = document.createElement("option");
-      opt.value = name;
-      opt.textContent = name;
-      agentSelect.appendChild(opt);
-    });
-
-    // keep running agent selected if exists
-    if (window.__activeJob?.agentName) {
-      agentSelect.value = window.__activeJob.agentName;
-      applyAgentUI(agentSelect.value);
-    } else {
-      applyAgentUI("");
-    }
-
-    syncRunButton();
-  }
-
-  // ✅ Attach polling for a jobId
-  function attachPolling(jobId, { resume = false } = {}) {
-    // Ensure we have a job object
-    if (!window.__activeJob || window.__activeJob.jobId !== jobId) {
-      window.__activeJob = {
-        jobId,
-        agentName: agentSelect.value || window.__activeJob?.agentName || "",
-        terminalHandled: false,
-        lastLogCount: 0,
-      };
-    }
-
-    startJobPolling({
-      jobId,
-      onTick: (err, st) => {
-        const job = window.__activeJob;
-        if (!job || job.jobId !== jobId) return;
-
-        // If already handled terminal, ignore any further ticks
-        if (job.terminalHandled) return;
-
-        if (err) {
-          const curPct = Number((progressPctEl?.textContent || "0").replace("%", "")) || 0;
-          setProgress(curPct, "Connecting…");
-          return;
-        }
-
-        const status = normStatus(st.status);
-        const hint = st.hint || (status ? status.toUpperCase() : "");
-
-        // progress
-        if (typeof st.pct === "number") {
-          setProgress(st.pct, hint);
-        } else {
-          const curPct = Number((progressPctEl?.textContent || "0").replace("%", "")) || 0;
-          setProgress(curPct, hint);
-        }
-
-        // logs (no duplication on resume)
-        const logs = Array.isArray(st.logs) ? st.logs : [];
-
-        if (resume && job.lastLogCount === 0) {
-          job.lastLogCount = logs.length;
-        }
-
-        if (logs.length > job.lastLogCount) {
-          logs.slice(job.lastLogCount).forEach((line) => logLine(line, "info"));
-          job.lastLogCount = logs.length;
-        }
-
-        // running
-        if (isRunningStatus(status)) {
-          running = true;
-          window.__consoleRunning = true;
-          lockInputs(true);
-          return;
-        }
-
-        // done
-        if (isDoneStatus(status)) {
-          job.terminalHandled = true;
-          stopJobPolling(); // ✅ stop immediately
-
-          setProgress(100, "Completed");
-          lockInputs(false);
-
-          if (st.outputs) renderOutputs(st.outputs);
-
-          logLine("Completed.", "ok");
-          window.toast("✓ Agent completed");
-
-          clearActiveJob();
-          resetForNextRunKeepAgent();
-          return;
-        }
-
-        // error
-        if (isErrorStatus(status) || st.error) {
-          job.terminalHandled = true;
-          stopJobPolling(); // ✅ stop immediately
-
-          lockInputs(false);
-          setProgress(Math.min(100, Number(st.pct) || 0), "Failed");
-
-          logLine("Error: " + (st.error || "Unknown error"), "err");
-          window.toast("Agent failed", "err");
-
-          clearActiveJob();
-          resetForNextRunKeepAgent();
-          return;
-        }
-      },
-    });
   }
 
   async function runAgent() {
-    if (window.__consoleRunning || window.__activeJob?.jobId) return;
+    if (window.__job.id) return;
 
-    const agentName = agentSelect.value;
-    if (!agentName) {
-      window.toast("Select an agent first", "err");
+    var sel = g("agentSelect");
+    if (!sel || !sel.value) {
+      window.toast("Select an agent", "err");
       return;
     }
 
-    const files = fileInput.files;
-    if (!files || !files.length) {
-      window.toast("Select file(s) first", "err");
+    var fi = g("files");
+    if (!fi || !fi.files || !fi.files.length) {
+      window.toast("Select a file", "err");
       return;
     }
 
-    const month = (document.getElementById("month")?.value || "").trim();
-    const year = (document.getElementById("year")?.value || "").trim();
+    var agentName = sel.value;
+    var month = ((g("month") && g("month").value) || "").trim();
+    var year = ((g("year") && g("year").value) || "").trim();
 
-    if (needsMonthYear(agentName) && (!month || !year)) {
-      logLine("Month and Year are required for this agent.", "err");
+    if (needsMY(agentName) && (!month || !year)) {
       window.toast("Month/Year required", "err");
       return;
     }
 
-    // reset UI for a fresh run
-    logContentEl.textContent = "";
-    if (outListEl) outListEl.innerHTML = `<div class="outputs-empty">— Running… —</div>`;
-    setProgress(2, "Uploading…");
+    finished = false;
 
-    const fd = new FormData();
-    for (const f of files) fd.append("files", f);
-    if (needsMonthYear(agentName)) {
+    var lc = g("logContent");
+    if (lc) lc.textContent = "";
+
+    var ol = g("outList");
+    if (ol) ol.innerHTML = '<div class="outputs-empty">— Running… —</div>';
+
+    setProgress(2, "Uploading…");
+    lockAll();
+
+    logLine("Agent: " + agentName, "info");
+    if (needsMY(agentName)) logLine("Period: " + month + " / " + year, "info");
+    logLine("Files: " + fi.files.length + " file(s)", "info");
+    logLine("Starting...", "info");
+
+    var fd = new FormData();
+    for (var i = 0; i < fi.files.length; i++) {
+      fd.append("files", fi.files[i]);
+    }
+
+    if (needsMY(agentName)) {
       fd.append("month", month);
       fd.append("year", year);
     }
 
-    running = true;
-    window.__consoleRunning = true;
-    lockInputs(true);
-
-    logLine(`Client: Inc.5 Shoes`, "info");
-    logLine(`Agent: ${agentName}`, "info");
-    if (needsMonthYear(agentName)) logLine(`Period: ${month} / ${year}`, "info");
-    logLine(`Files: ${files.length} file(s)`, "info");
-    logLine(`Starting...`, "info");
-
-    let res;
     try {
-      res = await fetch(`/run/${encodeURIComponent(agentName)}`, {
+      var res = await fetch("/run/" + encodeURIComponent(agentName), {
         method: "POST",
         body: fd,
-        credentials: "include",
+        credentials: "include"
       });
+
+      var data = await res.json();
+
+      if (!data.ok || !data.jobId) {
+        logLine("Error: " + (data.error || "No jobId"), "err");
+        window.toast("Failed to start", "err");
+        finished = true;
+        unlockAll();
+        return;
+      }
+
+      window.__job = { id: data.jobId, agent: agentName };
+      window.__consoleRunning = true;
+
+      logLine("Job started: " + data.jobId, "ok");
+      setProgress(5, "Queued…");
+      startWatching(data.jobId);
     } catch (e) {
-      lockInputs(false);
-      setProgress(0, "Failed");
       logLine("Network error: " + e.message, "err");
       window.toast("Network error", "err");
-      clearActiveJob();
-      resetForNextRunKeepAgent();
-      return;
+      finished = true;
+      unlockAll();
     }
-
-    let data;
-    try {
-      data = await res.json();
-    } catch {
-      lockInputs(false);
-      setProgress(0, "Failed");
-      logLine("Server returned invalid JSON.", "err");
-      window.toast("Response error", "err");
-      clearActiveJob();
-      resetForNextRunKeepAgent();
-      return;
-    }
-
-    if (!data.ok) {
-      lockInputs(false);
-      setProgress(0, "Failed");
-      logLine("Error: " + (data.error || "Unknown error"), "err");
-      window.toast("Agent failed", "err");
-      clearActiveJob();
-      resetForNextRunKeepAgent();
-      return;
-    }
-
-    const jobId = data.jobId;
-    if (!jobId) {
-      lockInputs(false);
-      setProgress(0, "Failed");
-      logLine("Server did not return jobId. Update server.js to support background job + /api/job-status.", "err");
-      window.toast("Missing jobId", "err");
-      clearActiveJob();
-      resetForNextRunKeepAgent();
-      return;
-    }
-
-    window.__activeJob = {
-      jobId,
-      agentName,
-      terminalHandled: false,
-      lastLogCount: 0,
-    };
-
-    logLine(`Job started: ${jobId}`, "ok");
-    setProgress(5, "Queued…");
-
-    attachPolling(jobId, { resume: false });
-    syncRunButton();
   }
 
-  // ── File zone drag & drop ──
-  if (fileZone && fileInput) {
-    fileZone.addEventListener("dragover", (e) => {
-      if (fileZone.classList.contains("locked")) return;
-      e.preventDefault();
-      fileZone.classList.add("drag-over");
-    });
+  var fzEl = g("fileZone");
+  var fiEl = g("files");
 
-    fileZone.addEventListener("dragleave", () => fileZone.classList.remove("drag-over"));
-
-    fileZone.addEventListener("drop", (e) => {
-      if (fileZone.classList.contains("locked")) return;
-      e.preventDefault();
-      fileZone.classList.remove("drag-over");
-
-      if (e.dataTransfer?.files?.length) {
-        const dt = new DataTransfer();
-        Array.from(e.dataTransfer.files).forEach((f) => dt.items.add(f));
-        fileInput.files = dt.files;
-        updateFileStatus();
+  if (fzEl && fiEl) {
+    fzEl.addEventListener("dragover", function (e) {
+      if (!fzEl.classList.contains("locked")) {
+        e.preventDefault();
+        fzEl.classList.add("drag-over");
       }
     });
 
-    fileInput.addEventListener("change", updateFileStatus);
+    fzEl.addEventListener("dragleave", function () {
+      fzEl.classList.remove("drag-over");
+    });
+
+    fzEl.addEventListener("drop", function (e) {
+      if (fzEl.classList.contains("locked")) return;
+
+      e.preventDefault();
+      fzEl.classList.remove("drag-over");
+
+      if (e.dataTransfer && e.dataTransfer.files.length) {
+        var dt = new DataTransfer();
+        Array.from(e.dataTransfer.files).forEach(function (f) {
+          dt.items.add(f);
+        });
+        fiEl.files = dt.files;
+        updateFileUI();
+      }
+    });
+
+    fiEl.addEventListener("change", updateFileUI);
   }
 
-  function updateFileStatus() {
-    const files = fileInput.files;
+  function updateFileUI() {
+    var fi = g("files");
+    var fz = g("fileZone");
+    var fs = g("fileStatus");
+    var lbl = g("fileZoneLabel");
 
-    if (!files || !files.length) {
-      if (fileZone) fileZone.classList.remove("has-files");
-      if (fileStatus) fileStatus.textContent = "";
-      syncRunButton();
+    if (!fi || !fi.files || !fi.files.length) {
+      if (fz) fz.classList.remove("has-files");
+      if (fs) fs.textContent = "";
+      applyAgent((g("agentSelect") || {}).value || "");
+      syncBtn();
       return;
     }
 
-    if (fileZone) fileZone.classList.add("has-files");
+    if (fz) fz.classList.add("has-files");
 
-    const names = Array.from(files).map((f) => f.name).join(", ");
-    if (fileStatus) fileStatus.textContent = files.length === 1 ? names : `${files.length} files selected`;
+    var names = Array.from(fi.files).map(function (f) {
+      return f.name;
+    }).join(", ");
 
-    const fileZoneLabel = document.getElementById("fileZoneLabel");
-    if (fileZoneLabel)
-      fileZoneLabel.innerHTML =
-        files.length === 1
-          ? `<span style="color:var(--green)">${safe(names)}</span>`
-          : `<span style="color:var(--green)">${files.length} files selected</span>`;
+    if (fs) fs.textContent = fi.files.length === 1 ? names : fi.files.length + " files selected";
 
-    syncRunButton();
+    if (lbl) {
+      lbl.innerHTML = fi.files.length === 1
+        ? '<span style="color:var(--green)">' + safe(names) + "</span>"
+        : '<span style="color:var(--green)">' + fi.files.length + " files selected</span>";
+    }
+
+    syncBtn();
   }
 
-  // buttons
-  btnRun.onclick = runAgent;
+  var bRun = g("btnRun");
+  if (bRun) bRun.onclick = runAgent;
 
-  // ✅ Clear button: reset fields/logs WITHOUT reload
-  const clearConsole = () => {
-    if (window.__consoleRunning || window.__activeJob?.jobId) {
-      window.toast("Agent is running. Wait to finish.", "err");
-      return;
-    }
+  var bClear = g("btnClear");
+  if (bClear) {
+    bClear.onclick = function () {
+      if (window.__job.id) {
+        window.toast("Agent is running", "err");
+        return;
+      }
 
-    logContentEl.textContent = "";
-    if (outListEl) outListEl.innerHTML = `<div class="outputs-empty">— No outputs yet —</div>`;
-    setProgress(0, "Idle");
-    resetForNextRunKeepAgent();
-    lockInputs(false);
-  };
+      var lc = g("logContent");
+      if (lc) lc.textContent = "";
 
-  // ✅ TOP-RIGHT Reset: FULL refresh (like browser refresh)
-  const hardResetConsole = () => {
-    if (window.__consoleRunning || window.__activeJob?.jobId) {
-      window.toast("Agent is running. Wait to finish.", "err");
-      return;
-    }
+      var ol = g("outList");
+      if (ol) ol.innerHTML = '<div class="outputs-empty">— No outputs yet —</div>';
 
-    // clear timers & state, then reload
-    stopJobPolling();
-    window.__activeJob = null;
-    window.__consoleRunning = false;
+      setProgress(0, "Idle");
 
-    window.location.reload();
-  };
+      try {
+        var fi = g("files");
+        if (fi) fi.value = "";
+      } catch (e) {}
 
-  if (btnClear) btnClear.onclick = clearConsole;
-  if (btnClearAll) btnClearAll.onclick = hardResetConsole;
+      var fz = g("fileZone");
+      if (fz) fz.classList.remove("has-files");
 
-  agentSelect.onchange = () => {
-    if (window.__consoleRunning || window.__activeJob?.jobId) return;
+      var fs = g("fileStatus");
+      if (fs) fs.textContent = "";
 
-    applyAgentUI(agentSelect.value);
+      applyAgent((g("agentSelect") || {}).value || "");
+      finished = true;
+      unlockAll();
+    };
+  }
 
-    // clear file selection on agent change
-    try {
-      fileInput.value = "";
-    } catch {}
-    if (fileZone) fileZone.classList.remove("has-files");
-    if (fileStatus) fileStatus.textContent = "";
+  var agSel = g("agentSelect");
+  if (agSel) {
+    agSel.onchange = function () {
+      if (window.__job.id) return;
 
-    setProgress(0, "Idle");
-    syncRunButton();
-  };
+      applyAgent(agSel.value);
 
-  // ✅ resume polling if job already running
-  if (window.__activeJob?.jobId) {
-    running = true;
+      try {
+        var fi = g("files");
+        if (fi) fi.value = "";
+      } catch (e) {}
+
+      var fz = g("fileZone");
+      if (fz) fz.classList.remove("has-files");
+
+      var fs = g("fileStatus");
+      if (fs) fs.textContent = "";
+
+      setProgress(0, "Idle");
+      syncBtn();
+    };
+  }
+
+  if (window.__job && window.__job.id) {
+    finished = false;
     window.__consoleRunning = true;
-
-    // select the running agent if known
-    if (window.__activeJob.agentName) {
-      agentSelect.value = window.__activeJob.agentName;
-      applyAgentUI(agentSelect.value);
-    }
-
-    lockInputs(true);
-    logLine(`Resuming job: ${window.__activeJob.jobId}`, "info");
-
-    attachPolling(window.__activeJob.jobId, { resume: true });
+    lockAll();
+    logLine("Resuming job: " + window.__job.id, "info");
+    startWatching(window.__job.id);
   } else {
-    lockInputs(false);
+    window.__job = { id: null, agent: null };
+    window.__consoleRunning = false;
+    finished = true;
+    hideOverlay();
+    setProgress(0, "Idle");
   }
 
-  initAgents();
+  if (window.__consoleRunning) showOverlay();
+  else hideOverlay();
+
+  loadAgents();
 };

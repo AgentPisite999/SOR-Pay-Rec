@@ -83,6 +83,14 @@
           <span class="sb-item-label">Reports</span>
         </button>
 
+        <!-- ✅ NEW: Base Dump -->
+        <button class="sb-item" data-page="basedump" type="button">
+          <span class="sb-item-icon">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><polyline points="9 14 12 17 15 14"/></svg>
+          </span>
+          <span class="sb-item-label">Base Dump</span>
+        </button>
+
         <button class="sb-item" data-page="analytics" type="button">
           <span class="sb-item-icon">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
@@ -130,6 +138,7 @@
 
   <script src="/js/app.js"></script>
   <script src="/js/report.js"></script>
+  <script src="/js/basedump.js"></script>
   <script src="/js/sections.js"></script>
 
   <script>
@@ -157,8 +166,6 @@
     })();
 
     // ─── Console run indicator (survives tab switching) ───
-    // app.js sets window.__consoleRunning = true/false
-    // This polls and updates the indicator
     (function () {
       const indicator  = document.getElementById("runIndicator");
       const liveTag    = document.getElementById("consoleRunTag");
@@ -174,7 +181,6 @@
   </script>
 
   <style>
-    /* Run indicator in topbar */
     .run-indicator {
       display: flex;
       align-items: center;
@@ -205,8 +211,6 @@
       from { opacity: 0; }
       to   { opacity: 1; }
     }
-
-    /* Live tag in sidebar */
     .sb-item-tag:not(.soon) {
       color: var(--amber, #E8A830);
       border-color: rgba(232,168,48,0.3);

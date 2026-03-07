@@ -1,12 +1,11 @@
 // =========================
 // FILE: public/js/sections.js
 // Inc.5 SOR Portal — Section Loader
-// ✅ Supports: console, report, analytics, help
-// ✅ console tab → restores previous run state
+// ✅ Supports: console, report, analytics, help, basedump
 // =========================
 
 const mainEl = document.getElementById("main");
-const VALID_SECTIONS = ["console", "report", "analytics", "help"];
+const VALID_SECTIONS = ["console", "report", "analytics", "help", "basedump"];
 
 function setActive(page) {
   document.querySelectorAll(".sb-item").forEach((b) => {

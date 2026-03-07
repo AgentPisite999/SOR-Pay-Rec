@@ -1,241 +1,436 @@
 // =========================
-// FILE: public/js/report.js  (FULL UPDATED)
-// Inc.5 SOR Portal — Reports Section Init
-// ✅ Works with sections.js loader (window.__sectionInit.report)
-// ✅ No ES module export (because index.html uses normal <script> tags)
-// ✅ Prevents duplicate event listeners on re-open
+// FILE: public/js/report.js
+// Inc.5 SOR Portal — Reports
+// ✅ Multi-select checkboxes for Month & Year
+// ✅ Auto-loads filters when agent already selected on init
+// ✅ All / None quick actions + badge count
+// ✅ Client-side filtering + XLSX export
 // =========================
 
 window.__sectionInit = window.__sectionInit || {};
 
 window.__sectionInit.report = function () {
-  initReportPage(document);
-};
 
-function initReportPage(root = document) {
   var MO = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
 
-  var agSel  = root.getElementById("rpt-agent");
+  var agSel  = document.getElementById("rpt-agent");
   if (!agSel) return;
-
-  // ✅ prevent duplicate event binding when switching tabs
   if (agSel.dataset.bound === "1") return;
   agSel.dataset.bound = "1";
 
-  var moSel  = root.getElementById("rpt-month");
-  var yrSel  = root.getElementById("rpt-year");
-  var showB  = root.getElementById("rpt-show");
-  var refB   = root.getElementById("rpt-refresh");
-  var dlB    = root.getElementById("rpt-dl");
-  var retryB = root.getElementById("s-retry");
-  var pill   = root.getElementById("rpt-pill");
-  var cnt    = root.getElementById("rpt-count");
-
-  var sIdle  = root.getElementById("s-idle");
-  var sLF    = root.getElementById("s-lf");
-  var sLD    = root.getElementById("s-ld");
-  var sErr   = root.getElementById("s-err");
-  var sTable = root.getElementById("s-table");
-  var lfName = root.getElementById("s-lf-name");
-  var ldDesc = root.getElementById("s-ld-desc");
-  var errMsg = root.getElementById("s-err-msg");
-  var thead  = root.getElementById("rpt-thead");
-  var tbody  = root.getElementById("rpt-tbody");
+  var showB  = document.getElementById("rpt-show");
+  var refB   = document.getElementById("rpt-refresh");
+  var dlB    = document.getElementById("rpt-dl");
+  var retryB = document.getElementById("s-retry");
+  var pill   = document.getElementById("rpt-pill");
+  var cnt    = document.getElementById("rpt-count");
+  var sIdle  = document.getElementById("s-idle");
+  var sLF    = document.getElementById("s-lf");
+  var sLD    = document.getElementById("s-ld");
+  var sErr   = document.getElementById("s-err");
+  var sTable = document.getElementById("s-table");
+  var lfName = document.getElementById("s-lf-name");
+  var ldDesc = document.getElementById("s-ld-desc");
+  var errMsg = document.getElementById("s-err-msg");
+  var thead  = document.getElementById("rpt-thead");
+  var tbody  = document.getElementById("rpt-tbody");
 
   var curAgent = "", curH = [], curR = [];
 
-  function panel(p) {
-    [sIdle,sLF,sLD,sErr,sTable].forEach(function(el){ el.style.display="none"; });
-    if(p) p.style.display = (p===sTable) ? "block" : "flex";
-    pill.style.display = (p===sTable) ? "" : "none";
-    dlB.style.display  = (p===sTable) ? "" : "none";
+  // excluded = items user unchecked; empty set = all selected
+  var excluded  = { month: new Set(), year: new Set() };
+  var available = { month: [], year: [] };
+
+  // ─── Utilities ────────────────────────────────────────────
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/[&<>"']/g, function(c) {
+        return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c];
+      });
+  }
+  function isNum(s) {
+    return s !== "-" && s !== "" && !isNaN(parseFloat(s)) && isFinite(s);
   }
 
-  function esc(s){
-    return String(s).replace(/[&<>"']/g,function(c){
-      return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#039;"}[c];
+  // ─── Panel switcher ───────────────────────────────────────
+  function panel(active) {
+    [sIdle, sLF, sLD, sErr, sTable].forEach(function(el) {
+      if (el) el.style.display = "none";
     });
+    if (active) {
+      active.style.display = (active === sTable) ? "block" : "flex";
+    }
+    if (pill) pill.style.display = (active === sTable) ? "" : "none";
+    if (dlB)  dlB.style.display  = (active === sTable) ? "" : "none";
   }
 
-  function isN(s){ return s!=="-"&&s!==""&&!isNaN(parseFloat(s))&&isFinite(s); }
-
-  function callAPI(url, done) {
-    fetch(url, { credentials:"include", cache:"no-store" })
-      .then(function(r){
-        var ct = r.headers.get("content-type")||"";
-        if(!ct.includes("application/json")){
-          return r.text().then(function(t){
-            throw new Error("HTTP "+r.status+" — not JSON. Session may have expired.\n"+t.slice(0,200));
+  // ─── API helper ───────────────────────────────────────────
+  function callAPI(url, cb) {
+    fetch(url, { credentials: "include", cache: "no-store" })
+      .then(function(r) {
+        var ct = r.headers.get("content-type") || "";
+        if (!ct.includes("application/json")) {
+          return r.text().then(function(t) {
+            throw new Error("HTTP " + r.status + " — not JSON. " + t.slice(0, 200));
           });
         }
         return r.json();
       })
-      .then(function(j){
-        if(!j.ok) throw new Error(j.error||"ok:false");
-        done(null,j);
+      .then(function(j) {
+        if (!j.ok) throw new Error(j.error || "ok:false");
+        cb(null, j);
       })
-      .catch(function(e){ done(e,null); });
+      .catch(function(e) { cb(e, null); });
   }
 
-  function loadFilters(agent, silent) {
-    moSel.disabled = yrSel.disabled = showB.disabled = refB.disabled = true;
+  // ─── Multi-select: build checkboxes ───────────────────────
+  function buildList(type) {
+    var listEl = document.getElementById("ms-" + type + "-list");
+    if (!listEl) return;
+    listEl.innerHTML = "";
 
-    if(!silent){
-      moSel.innerHTML = "<option value='ALL'>Loading…</option>";
-      yrSel.innerHTML = "<option value='ALL'>Loading…</option>";
-      lfName.textContent = agent;
-      panel(sLF);
-    } else {
-      refB.classList.add("rpt-spin");
+    var items = available[type];
+    if (!items.length) {
+      listEl.innerHTML = '<div style="padding:10px 12px;font-family:\'JetBrains Mono\',monospace;font-size:11px;color:rgba(240,237,232,.3)">No data available</div>';
+      return;
     }
 
-    callAPI("/api/report-data?agent="+encodeURIComponent(agent)+"&month=ALL&year=ALL", function(err,data){
-      refB.classList.remove("rpt-spin");
+    items.forEach(function(val) {
+      var row = document.createElement("div");
+      row.className = "ms-item";
 
-      if(err){
-        moSel.disabled = yrSel.disabled = true;
-        moSel.innerHTML = "<option value='ALL'>All Months</option>";
-        yrSel.innerHTML = "<option value='ALL'>All Years</option>";
-        errMsg.textContent = err.message;
-        panel(sErr);
-        return;
-      }
+      var cb = document.createElement("input");
+      cb.type      = "checkbox";
+      cb.className = "ms-cb";
+      cb.value     = val;
+      cb.checked   = !excluded[type].has(val); // checked if NOT excluded
 
-      moSel.disabled = yrSel.disabled = false;
+      var lbl = document.createElement("span");
+      lbl.className   = "ms-item-label";
+      lbl.textContent = val;
 
-      var hdrs = (data.headers||[]).map(function(h){ return String(h).trim(); });
-      var mi = -1, yi = -1;
-      hdrs.forEach(function(h,i){
-        if (h.toUpperCase() === "MONTH") mi = i;
-        if (h.toUpperCase() === "YEAR")  yi = i;
+      row.appendChild(cb);
+      row.appendChild(lbl);
+
+      // clicking anywhere on the row toggles
+      row.addEventListener("mousedown", function(e) {
+        e.preventDefault(); // prevent losing focus
+        if (e.target === cb) return; // cb handles itself
+        cb.checked = !cb.checked;
+        syncExcluded(type, val, cb.checked);
+      });
+      cb.addEventListener("change", function() {
+        syncExcluded(type, val, cb.checked);
       });
 
-      var ms = {}, ys = {};
-      (data.rows||[]).forEach(function(r){
-        if (mi >= 0) { var m = String(r[mi]||"").trim().toUpperCase(); if(m) ms[m]=1; }
-        if (yi >= 0) { var y = String(r[yi]||"").trim();               if(y) ys[y]=1; }
-      });
-
-      var months = Object.keys(ms).sort(function(a,b){
-        return (MO.indexOf(a)<0?99:MO.indexOf(a)) - (MO.indexOf(b)<0?99:MO.indexOf(b));
-      });
-      var years = Object.keys(ys).sort(function(a,b){ return Number(b)-Number(a); });
-
-      moSel.innerHTML = "<option value='ALL'>All Months</option>";
-      months.forEach(function(m){
-        var o = document.createElement("option");
-        o.value = o.textContent = m;
-        moSel.appendChild(o);
-      });
-
-      yrSel.innerHTML = "<option value='ALL'>All Years</option>";
-      years.forEach(function(y){
-        var o = document.createElement("option");
-        o.value = o.textContent = y;
-        yrSel.appendChild(o);
-      });
-
-      showB.disabled = refB.disabled = false;
-      panel(sIdle);
+      listEl.appendChild(row);
     });
   }
 
-  function fetchReport(){
-    var agent = agSel.value, month = moSel.value, year = yrSel.value;
-    if(!agent) return;
+  function syncExcluded(type, val, isChecked) {
+    if (isChecked) {
+      excluded[type].delete(val);
+    } else {
+      excluded[type].add(val);
+    }
+    refreshTriggerLabel(type);
+  }
 
-    curAgent = agent;
-    ldDesc.textContent = agent+" · "+(month!=="ALL"?month:"All Months")+" · "+(year!=="ALL"?year:"All Years");
-    panel(sLD);
+  function refreshTriggerLabel(type) {
+    var btn   = document.getElementById("ms-" + type + "-btn");
+    var label = document.getElementById("ms-" + type + "-label");
+    if (!btn || !label) return;
+
+    // remove old badge
+    var old = btn.querySelector(".ms-badge");
+    if (old) old.remove();
+
+    var total    = available[type].length;
+    var numExcl  = excluded[type].size;
+    var numSel   = total - numExcl;
+
+    if (numExcl === 0 || numSel === total) {
+      label.textContent = type === "month" ? "All Months" : "All Years";
+    } else if (numSel === 0) {
+      label.textContent = "None selected";
+    } else {
+      var sel = available[type].filter(function(v) { return !excluded[type].has(v); });
+      var txt = sel.join(", ");
+      label.textContent = txt.length > 18 ? txt.slice(0, 18) + "…" : txt;
+
+      var badge       = document.createElement("span");
+      badge.className = "ms-badge";
+      badge.textContent = numSel;
+      btn.insertBefore(badge, btn.querySelector(".ms-chevron"));
+    }
+  }
+
+  function setAllChecked(type, check) {
+    var listEl = document.getElementById("ms-" + type + "-list");
+    if (!listEl) return;
+
+    if (check) {
+      excluded[type].clear();
+    } else {
+      available[type].forEach(function(v) { excluded[type].add(v); });
+    }
+    listEl.querySelectorAll(".ms-cb").forEach(function(cb) {
+      cb.checked = check;
+    });
+    refreshTriggerLabel(type);
+  }
+
+  // ─── Dropdown open / close ────────────────────────────────
+  function openDD(type) {
+    var btn = document.getElementById("ms-" + type + "-btn");
+    var dd  = document.getElementById("ms-" + type + "-dd");
+    if (btn) btn.classList.add("open");
+    if (dd)  { dd.style.display = "block"; dd.style.animation = "ddFadeIn .15s ease both"; }
+  }
+  function closeDD(type) {
+    var btn = document.getElementById("ms-" + type + "-btn");
+    var dd  = document.getElementById("ms-" + type + "-dd");
+    if (btn) btn.classList.remove("open");
+    if (dd)  dd.style.display = "none";
+  }
+  function toggleDD(type) {
+    var dd = document.getElementById("ms-" + type + "-dd");
+    if (!dd) return;
+    if (dd.style.display === "none" || !dd.style.display) openDD(type);
+    else closeDD(type);
+  }
+  function setMsDisabled(type, val) {
+    var btn = document.getElementById("ms-" + type + "-btn");
+    if (btn) btn.disabled = val;
+    if (val) closeDD(type);
+  }
+
+  // close on outside click
+  document.addEventListener("mousedown", function(e) {
+    ["month","year"].forEach(function(t) {
+      var wrap = document.getElementById("ms-" + t + "-wrap");
+      if (wrap && !wrap.contains(e.target)) closeDD(t);
+    });
+  });
+
+  // toggle buttons
+  ["month","year"].forEach(function(t) {
+    var btn = document.getElementById("ms-" + t + "-btn");
+    if (!btn) return;
+    btn.addEventListener("click", function(e) {
+      e.stopPropagation();
+      if (!btn.disabled) toggleDD(t);
+    });
+  });
+
+  // All / None buttons
+  document.querySelectorAll(".ms-act-btn").forEach(function(b) {
+    b.addEventListener("mousedown", function(e) {
+      e.stopPropagation();
+      e.preventDefault();
+      setAllChecked(b.dataset.ms, b.dataset.act === "all");
+    });
+  });
+
+  // ─── Get filter arrays for filtering ─────────────────────
+  // returns null = no filter, [] = none selected, [..] = specific
+  function getFilter(type) {
+    var excl = excluded[type];
+    if (excl.size === 0) return null; // all
+    return available[type].filter(function(v) { return !excl.has(v); });
+  }
+
+  // ─── Load filters from API ────────────────────────────────
+  function loadFilters(agent, silent) {
+    setMsDisabled("month", true);
+    setMsDisabled("year",  true);
+    if (showB) showB.disabled = true;
+    if (refB)  refB.disabled  = true;
+
+    if (!silent) {
+      available.month = []; available.year = [];
+      excluded.month  = new Set(); excluded.year = new Set();
+      if (lfName) lfName.textContent = agent;
+      panel(sLF);
+    } else {
+      if (refB) refB.classList.add("rpt-spin");
+    }
 
     callAPI(
-      "/api/report-data?agent="+encodeURIComponent(agent)+"&month="+encodeURIComponent(month)+"&year="+encodeURIComponent(year),
-      function(err,data){
-        if(err){ errMsg.textContent = err.message; panel(sErr); return; }
-        curH = data.headers || [];
-        curR = data.rows || [];
-        renderTable();
-        panel(sTable);
-        cnt.textContent = curR.length.toLocaleString();
+      "/api/report-data?agent=" + encodeURIComponent(agent) + "&month=ALL&year=ALL",
+      function(err, data) {
+        if (refB) refB.classList.remove("rpt-spin");
+
+        if (err) {
+          if (errMsg) errMsg.textContent = err.message;
+          panel(sErr);
+          return;
+        }
+
+        // find MONTH and YEAR column indices
+        var hdrs = (data.headers || []).map(function(h) { return String(h).trim().toUpperCase(); });
+        var mi = hdrs.indexOf("MONTH");
+        var yi = hdrs.indexOf("YEAR");
+
+        var ms = {}, ys = {};
+        (data.rows || []).forEach(function(r) {
+          if (mi >= 0) { var m = String(r[mi]||"").trim().toUpperCase(); if (m) ms[m] = 1; }
+          if (yi >= 0) { var y = String(r[yi]||"").trim();               if (y) ys[y] = 1; }
+        });
+
+        available.month = Object.keys(ms).sort(function(a,b) {
+          var ia = MO.indexOf(a), ib = MO.indexOf(b);
+          return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
+        });
+        available.year = Object.keys(ys).sort(function(a,b) {
+          return Number(b) - Number(a);
+        });
+
+        // reset excluded (all checked by default)
+        excluded.month = new Set();
+        excluded.year  = new Set();
+
+        // build checkbox lists
+        buildList("month");
+        buildList("year");
+        refreshTriggerLabel("month");
+        refreshTriggerLabel("year");
+
+        setMsDisabled("month", false);
+        setMsDisabled("year",  false);
+        if (showB) showB.disabled = false;
+        if (refB)  refB.disabled  = false;
+        panel(sIdle);
       }
     );
   }
 
-  function renderTable(){
-    thead.innerHTML = "<tr>"+curH.map(function(h){ return "<th>"+esc(h)+"</th>"; }).join("")+"</tr>";
+  // ─── Fetch & render report ────────────────────────────────
+  function fetchReport() {
+    var agent = agSel.value;
+    if (!agent) return;
+    curAgent = agent;
 
-    if(!curR.length){
-      tbody.innerHTML =
-        '<tr><td colspan="'+curH.length+'" style="text-align:center;padding:48px;color:rgba(240,237,232,.22);font-family:\'JetBrains Mono\',monospace;font-size:11px">No data for selected filters.</td></tr>';
-      cnt.textContent = "0";
+    var fM = getFilter("month");
+    var fY = getFilter("year");
+    var mDesc = fM === null ? "All Months" : (fM.length ? fM.join(", ") : "None");
+    var yDesc = fY === null ? "All Years"  : (fY.length ? fY.join(", ") : "None");
+    if (ldDesc) ldDesc.textContent = agent + " · " + mDesc + " · " + yDesc;
+    panel(sLD);
+
+    callAPI(
+      "/api/report-data?agent=" + encodeURIComponent(agent) + "&month=ALL&year=ALL",
+      function(err, data) {
+        if (err) { if (errMsg) errMsg.textContent = err.message; panel(sErr); return; }
+
+        curH = data.headers || [];
+        var rows = data.rows || [];
+
+        var hdrs = curH.map(function(h) { return String(h).trim().toUpperCase(); });
+        var mi   = hdrs.indexOf("MONTH");
+        var yi   = hdrs.indexOf("YEAR");
+
+        curR = rows.filter(function(r) {
+          if (fM !== null && mi >= 0) {
+            var m = String(r[mi]||"").trim().toUpperCase();
+            if (fM.indexOf(m) === -1) return false;
+          }
+          if (fY !== null && yi >= 0) {
+            var y = String(r[yi]||"").trim();
+            if (fY.indexOf(y) === -1) return false;
+          }
+          return true;
+        });
+
+        renderTable();
+        panel(sTable);
+        if (cnt) cnt.textContent = curR.length.toLocaleString();
+      }
+    );
+  }
+
+  function renderTable() {
+    if (thead) {
+      thead.innerHTML = "<tr>" + curH.map(function(h) {
+        return "<th>" + esc(h) + "</th>";
+      }).join("") + "</tr>";
+    }
+
+    if (!curR.length) {
+      if (tbody) tbody.innerHTML =
+        '<tr><td colspan="' + curH.length + '" style="text-align:center;padding:48px;' +
+        'color:rgba(240,237,232,.22);font-family:\'JetBrains Mono\',monospace;font-size:11px">' +
+        'No data for selected filters.</td></tr>';
+      if (cnt) cnt.textContent = "0";
       return;
     }
 
-    tbody.innerHTML = curR.map(function(row){
-      return "<tr>"+curH.map(function(h,i){
+    if (tbody) tbody.innerHTML = curR.map(function(row) {
+      return "<tr>" + curH.map(function(h, i) {
         var raw = row[i];
-        var val = (raw===undefined||raw===null||String(raw).trim()==="") ? "-" : String(raw);
+        var val = (raw === undefined || raw === null || String(raw).trim() === "") ? "-" : String(raw);
         var hl  = h.trim().toLowerCase();
-        var cls = (hl==="month"||hl==="year") ? "b" : (val==="-" ? "e" : (isN(val) ? "n" : ""));
-        return '<td class="'+cls+'">'+esc(val)+'</td>';
-      }).join("")+"</tr>";
+        var cls = (hl === "month" || hl === "year") ? "b" : (val === "-" ? "e" : (isNum(val) ? "n" : ""));
+        return '<td class="' + cls + '">' + esc(val) + '</td>';
+      }).join("") + "</tr>";
     }).join("");
   }
 
-  function doXLSX(){
-    if(!curH.length) return;
-
-    function run(){
+  // ─── XLSX export ──────────────────────────────────────────
+  function doXLSX() {
+    if (!curH.length) return;
+    function run() {
       var ws = window.XLSX.utils.aoa_to_sheet([curH].concat(curR));
-      ws["!cols"] = curH.map(function(h,i){
-        var mx = Math.max(
-          h.length,
-          Math.max.apply(null, curR.slice(0,300).map(function(r){ return String(r[i]||"").length; }))
-        );
-        return { wch: Math.min(52, Math.max(10, mx+2)) };
+      ws["!cols"] = curH.map(function(h, i) {
+        var mx = Math.max(h.length, Math.max.apply(null,
+          curR.slice(0, 300).map(function(r) { return String(r[i]||"").length; })
+        ));
+        return { wch: Math.min(52, Math.max(10, mx + 2)) };
       });
-
+      var fM = getFilter("month");
+      var fY = getFilter("year");
+      var mv = fM && fM.length ? "_" + fM.join("-") : "";
+      var yv = fY && fY.length ? "_" + fY.join("-") : "";
       var wb = window.XLSX.utils.book_new();
-      var mv = moSel.value!=="ALL" ? "_"+moSel.value : "";
-      var yv = yrSel.value!=="ALL" ? "_"+yrSel.value : "";
-
-      window.XLSX.utils.book_append_sheet(wb, ws, curAgent.slice(0,31));
-      window.XLSX.writeFile(wb, curAgent.replace(/\s+/g,"_")+mv+yv+".xlsx");
+      window.XLSX.utils.book_append_sheet(wb, ws, curAgent.slice(0, 31));
+      window.XLSX.writeFile(wb, curAgent.replace(/\s+/g,"_") + mv + yv + ".xlsx");
       window.toast && window.toast("✓ Downloaded");
     }
-
-    if(window.XLSX){ run(); return; }
-    var s = document.createElement("script");
-    s.src = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
+    if (window.XLSX) { run(); return; }
+    var s   = document.createElement("script");
+    s.src   = "https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js";
     s.onload = run;
     document.head.appendChild(s);
   }
 
-  // events
-  agSel.addEventListener("change", function(){
-    var a = agSel.value;
-    if(!a){
-      moSel.disabled = yrSel.disabled = showB.disabled = refB.disabled = true;
-      moSel.innerHTML = "<option value='ALL'>All Months</option>";
-      yrSel.innerHTML = "<option value='ALL'>All Years</option>";
+  // ─── Events ───────────────────────────────────────────────
+  agSel.addEventListener("change", function() {
+    closeDD("month"); closeDD("year");
+    if (!agSel.value) {
+      setMsDisabled("month", true);
+      setMsDisabled("year",  true);
+      if (showB) showB.disabled = true;
+      if (refB)  refB.disabled  = true;
       panel(sIdle);
       return;
     }
-    loadFilters(a, false);
+    loadFilters(agSel.value, false);
   });
 
-  refB.addEventListener("click", function(){
-    if(agSel.value) loadFilters(agSel.value, true);
-  });
-
-  showB.addEventListener("click", fetchReport);
-  dlB.addEventListener("click", doXLSX);
-
-  retryB.addEventListener("click", function(){
-    if(agSel.value && !showB.disabled) fetchReport();
-    else if(agSel.value) loadFilters(agSel.value, false);
+  if (refB)   refB.addEventListener("click",   function() { if (agSel.value) loadFilters(agSel.value, true); });
+  if (showB)  showB.addEventListener("click",  fetchReport);
+  if (dlB)    dlB.addEventListener("click",    doXLSX);
+  if (retryB) retryB.addEventListener("click", function() {
+    if (agSel.value && showB && !showB.disabled) fetchReport();
+    else if (agSel.value) loadFilters(agSel.value, false);
     else panel(sIdle);
   });
 
-  panel(sIdle);
-}
+  // ─── ✅ AUTO-LOAD if agent already has a value on init ────
+  if (agSel.value) {
+    loadFilters(agSel.value, false);
+  } else {
+    panel(sIdle);
+  }
+
+};
