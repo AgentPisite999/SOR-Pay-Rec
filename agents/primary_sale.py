@@ -1,4 +1,6 @@
 
+
+
 # import os
 # import re
 # import json
@@ -15,8 +17,6 @@
 # from openpyxl.styles import PatternFill, Font, Alignment, Border, Side
 
 # from google.oauth2.service_account import Credentials
-# from googleapiclient.discovery import build
-
 # import gspread
 
 
@@ -62,7 +62,6 @@
 # GOOGLE_SA_JSON_B64 = (os.getenv("GOOGLE_SA_JSON_B64") or "").strip()
 # MASTER_SPREADSHEET_ID = (os.getenv("masterSpreadsheetId") or "").strip()
 # MASTER_SHEET_NAME = (os.getenv("SHEET_NAME2") or "Sheet1").strip().strip('"').strip("'")
-# MASTER_SCOPES = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
 
 
 # # ============================================================
@@ -72,7 +71,11 @@
 #     ap = argparse.ArgumentParser(description="Primary Sale processor")
 #     ap.add_argument("--input", required=True, help="Path to input file (.xlsx/.xls)")
 #     ap.add_argument("--output_dir", required=True, help="Directory to write outputs")
-#     ap.add_argument("--output_name", default="Output.xlsx", help="Output Excel file name (default: Output.xlsx)")
+#     ap.add_argument(
+#         "--output_name",
+#         default="Output.xlsx",
+#         help="Output Excel file name (default: Output.xlsx)",
+#     )
 #     return ap.parse_args()
 
 
@@ -130,41 +133,43 @@
 
 
 # # =============================================================================
-# # B) READ MASTER (Google): Groups, Customer Name
+# # B) READ MASTER (Google): Groups, Customer Name  (UPDATED: gspread instead of googleapiclient)
 # # =============================================================================
-# def get_sheets_service():
-#     if not GOOGLE_SA_JSON_B64:
-#         raise ValueError("Missing GOOGLE_SA_JSON_B64 in server/.env")
-#     if not MASTER_SPREADSHEET_ID:
-#         raise ValueError("Missing masterSpreadsheetId in server/.env")
+# def get_gspread_client_readonly():
+#     sa_b64 = get_env_required("GOOGLE_SA_JSON_B64")
+#     try:
+#         sa_info = json.loads(base64.b64decode(sa_b64).decode("utf-8"))
+#     except Exception as e:
+#         raise RuntimeError("GOOGLE_SA_JSON_B64 is not valid base64 service account json") from e
 
-#     sa_json = json.loads(base64.b64decode(GOOGLE_SA_JSON_B64).decode("utf-8"))
-#     creds = Credentials.from_service_account_info(sa_json, scopes=MASTER_SCOPES)
-#     return build("sheets", "v4", credentials=creds)
+#     scopes = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
+#     creds = Credentials.from_service_account_info(sa_info, scopes=scopes)
+#     return gspread.authorize(creds)
 
 
 # def read_master_groups_customers() -> List[Tuple[str, str]]:
-#     service = get_sheets_service()
-#     resp = service.spreadsheets().values().get(
-#         spreadsheetId=MASTER_SPREADSHEET_ID,
-#         range=f"{MASTER_SHEET_NAME}!A:Z"
-#     ).execute()
+#     if not MASTER_SPREADSHEET_ID:
+#         raise ValueError("Missing masterSpreadsheetId in server/.env")
 
-#     values = resp.get("values", [])
+#     gc = get_gspread_client_readonly()
+#     sh = gc.open_by_key(MASTER_SPREADSHEET_ID)
+#     ws = sh.worksheet(MASTER_SHEET_NAME)
+
+#     values = ws.get_all_values()
 #     if len(values) < 2:
 #         raise ValueError("Master sheet has no data.")
 
-#     headers = [str(h).strip() for h in values[0]]
+#     headers = [h.strip() for h in values[0]]
 #     if "Groups" not in headers or "Customer Name" not in headers:
 #         raise ValueError('Master must have headers "Groups" and "Customer Name".')
 
 #     g_col = headers.index("Groups")
 #     c_col = headers.index("Customer Name")
 
-#     out = []
+#     out: List[Tuple[str, str]] = []
 #     for r in values[1:]:
-#         g = str(r[g_col]).strip() if g_col < len(r) and r[g_col] is not None else ""
-#         c = str(r[c_col]).strip() if c_col < len(r) and r[c_col] is not None else ""
+#         g = r[g_col].strip() if g_col < len(r) else ""
+#         c = r[c_col].strip() if c_col < len(r) else ""
 #         if g and c:
 #             out.append((g, c))
 #     return out
@@ -532,22 +537,14 @@
 
 
 # def extract_final_df_without_grand_total(wb) -> pd.DataFrame:
-#     """
-#     Reads the 'final' sheet and returns a dataframe:
-#     - uses row 2 as header (Month/Year/Groups/Customer Name/...).
-#     - data starts from row 3
-#     - stops before the row containing "Grand Total" in column A
-#     - drops completely empty rows
-#     """
 #     if FINAL_SHEET_NAME not in wb.sheetnames:
 #         raise ValueError(f'Final sheet not found: "{FINAL_SHEET_NAME}"')
 
 #     ws = wb[FINAL_SHEET_NAME]
 
-#     # Header is row 2 in your template
 #     header_row = 2
 #     headers = []
-#     for c in range(1, 23):  # A..V (22 cols)
+#     for c in range(1, 23):  # A..V
 #         v = ws.cell(row=header_row, column=c).value
 #         headers.append(str(v).strip() if v is not None else f"COL_{c}")
 
@@ -559,14 +556,12 @@
 #             break
 
 #         row_vals = [ws.cell(row=r, column=c).value for c in range(1, 23)]
-#         # drop totally blank row
 #         if any(v is not None and str(v).strip() != "" for v in row_vals):
 #             data.append(row_vals)
 #         r += 1
 
 #     df = pd.DataFrame(data, columns=headers)
 
-#     # Normalize Month/Year just in case
 #     if "Month" in df.columns:
 #         df["Month"] = df["Month"].astype(str).str.strip()
 #     if "Year" in df.columns:
@@ -576,11 +571,6 @@
 
 
 # def upsert_primary_sale_to_gsheet(df_final: pd.DataFrame):
-#     """
-#     Upsert into PRIM_SALE tab by Month+Year:
-#       - if Month+Year already exists -> remove those rows, then append new block
-#       - else append at bottom
-#     """
 #     out_sheet_id = get_env_required("PRIM_SALE_SHEET_ID")
 #     out_tab_name = get_env_required("PRIM_SALE_TAB_NAME").strip().strip('"').strip("'")
 
@@ -590,7 +580,6 @@
 #     if "Month" not in df_final.columns or "Year" not in df_final.columns:
 #         raise ValueError("Final dataframe must contain Month and Year columns.")
 
-#     # Use first row as the upsert key (one month/year per run)
 #     month_key = str(df_final.iloc[0]["Month"]).strip()
 #     year_key = str(df_final.iloc[0]["Year"]).strip()
 
@@ -603,7 +592,6 @@
 
 #     values = ws.get_all_values()
 
-#     # If empty -> write header + rows
 #     if not values:
 #         payload = [df_final.columns.tolist()] + df_final.fillna("").astype(str).values.tolist()
 #         ws.update(payload)
@@ -613,7 +601,6 @@
 #     header = [h.strip() for h in values[0]]
 #     rows = values[1:]
 
-#     # If header invalid, rebuild
 #     if not header or "Month" not in header or "Year" not in header:
 #         ws.clear()
 #         payload = [df_final.columns.tolist()] + df_final.fillna("").astype(str).values.tolist()
@@ -623,19 +610,15 @@
 
 #     df_existing = pd.DataFrame(rows, columns=header)
 
-#     # Normalize for comparison
 #     df_existing["Month"] = df_existing["Month"].astype(str).str.strip().str.upper()
 #     df_existing["Year"] = df_existing["Year"].astype(str).str.strip()
 
-#     # Align existing columns to new (keep it consistent)
 #     df_existing = df_existing.reindex(columns=df_final.columns)
 
-#     # Remove existing block for same Month+Year
 #     df_filtered = df_existing[
 #         ~((df_existing["Month"] == month_key_cmp) & (df_existing["Year"] == year_key_cmp))
 #     ].copy()
 
-#     # Ensure new df month is same normalization as sheet (not mandatory but nice)
 #     df_new = df_final.copy()
 #     df_new["Month"] = df_new["Month"].astype(str).str.strip().str.upper()
 #     df_new["Year"] = df_new["Year"].astype(str).str.strip()
@@ -660,10 +643,8 @@
 #     output_dir.mkdir(parents=True, exist_ok=True)
 #     out_file = str(output_dir / args.output_name)
 
-#     # 1) Build Primary sale raw df from input excel
 #     df_raw = build_primary_sale_raw_df(input_file)
 
-#     # Choose month/year for final sheet (use first valid row)
 #     month_text = ""
 #     year_text = ""
 #     if "Month" in df_raw.columns and "Year" in df_raw.columns:
@@ -672,7 +653,6 @@
 #             month_text = str(s.iloc[0]["Month"])
 #             year_text = str(s.iloc[0]["Year"])
 
-#     # 2) Load or create output workbook
 #     if os.path.exists(out_file):
 #         wb = load_workbook(out_file)
 #     else:
@@ -680,23 +660,15 @@
 #         if "Sheet" in wb.sheetnames:
 #             wb.remove(wb["Sheet"])
 
-#     # 3) Write raw sheet
 #     write_df_to_sheet(wb, RAW_SHEET_PRIMARY, df_raw)
 
-#     # 4) Read master mapping from Google
 #     master_rows = read_master_groups_customers()
-
-#     # 5) Build final template
 #     build_final_template(wb, master_rows, month_text, year_text)
-
-#     # 6) Fill final from raw
 #     fill_final_from_raw(wb)
 
-#     # 7) Save file
 #     wb.save(out_file)
 #     print("Done. Saved:", out_file)
 
-#     # 8) Upload FINAL to Google Sheet tab PRIM_SALE (excluding Grand Total)
 #     df_final_upload = extract_final_df_without_grand_total(wb)
 #     upsert_primary_sale_to_gsheet(df_final_upload)
 
@@ -838,7 +810,7 @@ def write_df_to_sheet(wb, sheet_name: str, df: pd.DataFrame):
 
 
 # =============================================================================
-# B) READ MASTER (Google): Groups, Customer Name  (UPDATED: gspread instead of googleapiclient)
+# B) READ MASTER (Google): Groups, Customer Name
 # =============================================================================
 def get_gspread_client_readonly():
     sa_b64 = get_env_required("GOOGLE_SA_JSON_B64")
@@ -1357,6 +1329,11 @@ def main():
         if not s.empty:
             month_text = str(s.iloc[0]["Month"])
             year_text = str(s.iloc[0]["Year"])
+
+    # ✅ Signal data period to server.js for Drive folder naming
+    # month_text is like "Feb", year_text is like "2026"
+    if month_text and year_text:
+        print(f"PERIOD: {month_text.upper()[:3]}-{year_text}")
 
     if os.path.exists(out_file):
         wb = load_workbook(out_file)

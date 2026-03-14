@@ -1,7 +1,7 @@
 // =========================
 // FILE: public/js/sections.js
 // Inc.5 SOR Portal — Section Loader
-// ✅ Supports: console, report, analytics, help, basedump
+// Supports: console, report, analytics, help, basedump
 // =========================
 
 const mainEl = document.getElementById("main");
@@ -11,6 +11,26 @@ function setActive(page) {
   document.querySelectorAll(".sb-item").forEach((b) => {
     b.classList.toggle("active", b.dataset.page === page);
   });
+}
+
+// innerHTML does NOT execute <script> tags — this re-executes them safely
+function runScriptsIn(container) {
+  try {
+    Array.from(container.querySelectorAll("script")).forEach((oldScript) => {
+      try {
+        const newScript = document.createElement("script");
+        Array.from(oldScript.attributes).forEach((attr) => {
+          newScript.setAttribute(attr.name, attr.value);
+        });
+        newScript.textContent = oldScript.textContent;
+        oldScript.parentNode.replaceChild(newScript, oldScript);
+      } catch (scriptErr) {
+        console.warn("[sections] Script execution error:", scriptErr);
+      }
+    });
+  } catch (e) {
+    console.warn("[sections] runScriptsIn error:", e);
+  }
 }
 
 async function loadSection(name, { pushHash = true } = {}) {
@@ -34,6 +54,10 @@ async function loadSection(name, { pushHash = true } = {}) {
 
     mainEl.innerHTML = await res.text();
 
+    // Execute <script> tags injected via innerHTML (browser doesn't run them automatically)
+    runScriptsIn(mainEl);
+
+    // Call the section's registered init function
     const fn = window.__sectionInit?.[name];
     if (typeof fn === "function") fn();
 

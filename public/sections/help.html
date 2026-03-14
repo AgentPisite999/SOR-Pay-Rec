@@ -3,240 +3,357 @@
   <div class="page-header">
     <div>
       <h1 class="page-title">Help &amp; <span class="page-title-accent">Format Guide</span></h1>
-      <div class="page-subtitle">Input formats · SOPs · Agent documentation · FAQs</div>
-    </div>
-    <div class="page-actions">
-      <span class="help-badge">Coming Soon</span>
+      <div class="page-subtitle">Select an agent to view its resources</div>
     </div>
   </div>
 
-  <!-- Coming soon overview card -->
-  <div class="card" style="margin-bottom: 16px">
-    <div class="card-body">
-      <div class="help-hero">
-        <div class="help-hero-icon">
-          <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="0.8" style="opacity:0.25">
-            <circle cx="12" cy="12" r="10"/>
-            <path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
-        </div>
-        <div>
-          <div class="help-hero-title">Documentation &amp; SOPs are being prepared</div>
-          <div class="help-hero-sub">
-            This section will contain step-by-step format guides for each agent's input file, field definitions, sample templates, and standard operating procedures. Reach out to your admin for current format requirements.
-          </div>
-        </div>
-      </div>
-    </div>
+  <div class="help-section-label-row">
+    <span class="help-section-label-text">Select Agent</span>
+    <span class="help-section-label-line"></span>
   </div>
 
-  <!-- Planned sections grid -->
-  <div class="help-grid">
+  <div class="help-agent-selector" id="helpAgentSelector">
+    <button class="has-btn" data-key="PAY_STK">
+      <span class="has-icon">📦</span>
+      <span class="has-label">Payable Stock</span>
+      <span class="has-code">PAY-STK</span>
+    </button>
+    <button class="has-btn" data-key="PAY_TD">
+      <span class="has-icon">💳</span>
+      <span class="has-label">Payable Trade Discount</span>
+      <span class="has-code">PAY-TD</span>
+    </button>
+    <button class="has-btn" data-key="REC_STK">
+      <span class="has-icon">📥</span>
+      <span class="has-label">Receivable Stock</span>
+      <span class="has-code">REC-STK</span>
+    </button>
+    <button class="has-btn" data-key="REC_TD">
+      <span class="has-icon">📑</span>
+      <span class="has-label">Receivable Trade Discount</span>
+      <span class="has-code">REC-TD</span>
+    </button>
+    <button class="has-btn" data-key="PRI_SALE">
+      <span class="has-icon">📊</span>
+      <span class="has-label">Primary Sale</span>
+      <span class="has-code">PRI-SALE</span>
+    </button>
+  </div>
 
-    <div class="help-card">
-      <div class="help-card-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-      </div>
-      <div class="help-card-content">
-        <div class="help-card-title">Input Format Specs</div>
-        <div class="help-card-desc">Required columns, data types, date formats, and header names for each agent's input Excel / CSV file.</div>
-        <div class="help-card-agents">
-          <span class="hca">PAY-STK</span>
-          <span class="hca">PAY-TD</span>
-          <span class="hca">REC-STK</span>
-          <span class="hca">REC-TD</span>
-          <span class="hca">PRI-SALE</span>
-        </div>
-      </div>
-      <div class="help-soon-tag">Soon</div>
-    </div>
+  <div class="help-section-label-row" style="margin-top:28px">
+    <span class="help-section-label-text" id="helpResourcesLabel">Resources — Payable Stock</span>
+    <span class="help-section-label-line"></span>
+  </div>
 
-    <div class="help-card">
-      <div class="help-card-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-      </div>
-      <div class="help-card-content">
-        <div class="help-card-title">Standard Operating Procedures</div>
-        <div class="help-card-desc">Step-by-step SOPs for preparing input files, running agents, verifying outputs, and resolving common errors.</div>
-      </div>
-      <div class="help-soon-tag">Soon</div>
-    </div>
+  <div id="helpResourceCards" class="help-resource-cards"></div>
 
-    <div class="help-card">
-      <div class="help-card-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-      </div>
-      <div class="help-card-content">
-        <div class="help-card-title">Sample Templates</div>
-        <div class="help-card-desc">Downloadable blank Excel templates pre-formatted with the correct headers and column structure for each agent.</div>
-      </div>
-      <div class="help-soon-tag">Soon</div>
-    </div>
-
-    <div class="help-card">
-      <div class="help-card-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-      </div>
-      <div class="help-card-content">
-        <div class="help-card-title">FAQ &amp; Troubleshooting</div>
-        <div class="help-card-desc">Common errors, what they mean, and how to fix them. File size limits, column naming issues, and more.</div>
-      </div>
-      <div class="help-soon-tag">Soon</div>
-    </div>
-
-    <div class="help-card">
-      <div class="help-card-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.8 19.79 19.79 0 01.12 2.22 2 2 0 012.11 0h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L6.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 14.92z"/></svg>
-      </div>
-      <div class="help-card-content">
-        <div class="help-card-title">Support &amp; Escalation</div>
-        <div class="help-card-desc">Contact information for technical support, data discrepancy escalation, and system access issues.</div>
-      </div>
-      <div class="help-soon-tag">Soon</div>
-    </div>
-
-    <div class="help-card">
-      <div class="help-card-icon">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-      </div>
-      <div class="help-card-content">
-        <div class="help-card-title">Access &amp; Permissions</div>
-        <div class="help-card-desc">How domain-restricted login works, how to request access, and Google Drive folder permissions explained.</div>
-      </div>
-      <div class="help-soon-tag">Soon</div>
-    </div>
-
+  <div class="help-footer-note">
+    Links are configured by your admin via environment variables.
+    Contact your admin if a link is missing or access is restricted.
   </div>
 
 </div>
 
 <style>
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
+.help-section-label-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
 }
-
-.help-badge {
+.help-section-label-text {
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
-  padding: 5px 14px;
-  border-radius: 99px;
-  border: 1px solid var(--amber-border);
-  color: var(--amber);
-  background: var(--amber-glow);
-  letter-spacing: 0.1em;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-sub);
+  white-space: nowrap;
+}
+.help-section-label-line {
+  flex: 1;
+  height: 1px;
+  background: var(--border);
 }
 
-.help-hero {
+/* ── agent selector ── */
+.help-agent-selector {
   display: flex;
-  align-items: flex-start;
-  gap: 20px;
-  padding: 8px 0;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 4px;
 }
-
-.help-hero-icon {
-  flex-shrink: 0;
-  margin-top: 4px;
-}
-
-.help-hero-title {
-  font-size: 17px;
-  font-weight: 700;
-  margin-bottom: 8px;
-  color: var(--text);
-}
-
-.help-hero-sub {
-  font-family: 'JetBrains Mono', monospace;
-  font-size: 12px;
-  color: var(--text-muted);
-  line-height: 1.7;
-  max-width: 680px;
-}
-
-/* Grid */
-.help-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 14px;
-}
-
-.help-card {
+.has-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 20px;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  color: var(--text-muted);
+  font-family: inherit;
+  user-select: none;
+}
+.has-btn:hover {
+  border-color: var(--border-bright);
+  color: var(--text);
+}
+.has-btn.active {
+  border-color: var(--amber-border);
+  background: var(--amber-glow);
+  color: var(--text);
+}
+.has-icon { font-size: 15px; line-height: 1; }
+.has-label { font-size: 12px; font-weight: 600; white-space: nowrap; }
+.has-code {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--amber);
+  background: rgba(0,0,0,0.25);
+  border-radius: 3px;
+  padding: 2px 6px;
+  margin-left: 2px;
+}
+
+/* ── resource cards ── */
+.help-resource-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  margin-bottom: 24px;
+  min-height: 200px;
+}
+
+.hrc-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px 20px 20px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  text-decoration: none;
   position: relative;
-  transition: border-color 0.15s;
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(10px);
+  transition: border-color 0.15s, transform 0.3s ease, opacity 0.3s ease;
 }
-
-.help-card:hover {
+.hrc-card.hrc-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+.hrc-card.hrc-link { cursor: pointer; }
+.hrc-card.hrc-link:hover {
   border-color: var(--border-bright);
+  transform: translateY(-2px);
 }
+.hrc-card.hrc-nolink { cursor: default; }
+.hrc-card.hrc-nolink .hrc-icon-wrap { opacity: 0.4; }
+.hrc-card.hrc-nolink .hrc-title { color: var(--text-muted); }
 
-.help-card-icon {
-  width: 40px;
-  height: 40px;
+.hrc-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+.hrc-card.hrc-link:hover::before { opacity: 1; }
+.hrc-master::before  { background: var(--amber); }
+.hrc-format::before  { background: #4caf7d; }
+.hrc-process::before { background: #5b8dee; }
+
+.hrc-icon-wrap {
+  width: 44px; height: 44px;
   border-radius: var(--radius);
   border: 1px solid var(--border-mid);
-  background: rgba(255,255,255,0.03);
   display: grid;
   place-items: center;
-  color: var(--text-muted);
+  font-size: 20px;
+  background: rgba(255,255,255,0.03);
 }
-
-.help-card-title {
+.hrc-title {
   font-size: 14px;
   font-weight: 700;
-  margin-bottom: 6px;
+  color: var(--text);
+  margin-bottom: 5px;
 }
-
-.help-card-desc {
+.hrc-desc {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 11px;
+  font-size: 10.5px;
   color: var(--text-muted);
   line-height: 1.65;
 }
-
-.help-card-agents {
+.hrc-footer {
+  margin-top: auto;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 10px;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
-
-.hca {
+.hrc-action-label {
   font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
-  padding: 3px 8px;
-  border-radius: 4px;
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.hrc-master  .hrc-action-label { color: var(--amber); }
+.hrc-format  .hrc-action-label { color: #4caf7d; }
+.hrc-process .hrc-action-label { color: #5b8dee; }
+.hrc-nolink  .hrc-action-label { color: var(--text-sub); }
+
+.hrc-arrow-btn {
+  width: 26px; height: 26px;
+  border-radius: 50%;
   border: 1px solid var(--border-mid);
+  display: grid;
+  place-items: center;
   color: var(--text-sub);
+  transition: border-color 0.15s, color 0.15s;
+  flex-shrink: 0;
 }
+.hrc-link:hover .hrc-arrow-btn { border-color: var(--border-bright); color: var(--text); }
 
-.help-soon-tag {
+.hrc-not-set-badge {
   position: absolute;
-  top: 14px;
-  right: 14px;
+  top: 12px; right: 12px;
   font-family: 'JetBrains Mono', monospace;
-  font-size: 9px;
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
   padding: 3px 8px;
   border-radius: 99px;
   border: 1px solid var(--border);
   color: var(--text-sub);
-  letter-spacing: 0.08em;
 }
 
-@media (max-width: 1024px) {
-  .help-grid { grid-template-columns: repeat(2, 1fr); }
+.help-footer-note {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: var(--text-sub);
+  text-align: center;
+  padding: 14px 0 4px;
+  line-height: 1.8;
+  border-top: 1px solid var(--border);
 }
 
+@media (max-width: 900px) {
+  .help-resource-cards { grid-template-columns: 1fr; }
+}
 @media (max-width: 640px) {
-  .help-grid { grid-template-columns: 1fr; }
-  .help-hero { flex-direction: column; gap: 12px; }
+  .has-btn .has-label { display: none; }
 }
 </style>
+
+<script>
+(function () {
+
+  var AGENT_NAMES = {
+    PAY_STK:  'Payable Stock',
+    PAY_TD:   'Payable Trade Discount',
+    REC_STK:  'Receivable Stock',
+    REC_TD:   'Receivable Trade Discount',
+    PRI_SALE: 'Primary Sale',
+  };
+
+  var CARDS = [
+    {
+      type:  'master',
+      icon:  '🗂️',
+      title: 'Update Master Data',
+      desc:  'Open the master Google Sheet used by this agent — Margin, HSN, COGS, deductions and other reference data.',
+      label: 'Open Master Sheet',
+      key:   'master',
+    },
+    {
+      type:  'format',
+      icon:  '📋',
+      title: 'Download Input Format',
+      desc:  'Download the blank Excel / CSV template with the correct headers and column structure for uploading to this agent.',
+      label: 'Download Template',
+      key:   'format',
+    },
+    {
+      type:  'process',
+      icon:  '📖',
+      title: 'Process Document',
+      desc:  'Step-by-step SOP for preparing input files, running this agent, verifying outputs, and resolving common errors.',
+      label: 'Open Process Doc',
+      key:   'process',
+    },
+  ];
+
+  var SVG_ARROW = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>';
+
+  var _links       = {};
+  var _activeAgent = 'PAY_STK';
+
+  function makeCard(def, url, idx) {
+    var hasUrl = typeof url === 'string' && url.trim() !== '';
+    var el     = document.createElement(hasUrl ? 'a' : 'div');
+    el.className = 'hrc-card hrc-' + def.type + ' ' + (hasUrl ? 'hrc-link' : 'hrc-nolink');
+    if (hasUrl) { el.href = url.trim(); el.target = '_blank'; el.rel = 'noopener'; }
+    el.innerHTML =
+      (hasUrl ? '' : '<span class="hrc-not-set-badge">Not configured</span>') +
+      '<div class="hrc-icon-wrap">' + def.icon + '</div>' +
+      '<div><div class="hrc-title">' + def.title + '</div><div class="hrc-desc">' + def.desc + '</div></div>' +
+      '<div class="hrc-footer">' +
+        '<span class="hrc-action-label">' + (hasUrl ? def.label : 'Not configured') + '</span>' +
+        '<span class="hrc-arrow-btn">' + SVG_ARROW + '</span>' +
+      '</div>';
+    setTimeout(function () { el.classList.add('hrc-in'); }, 30 + idx * 80);
+    return el;
+  }
+
+  function renderCards(agentKey) {
+    var grid  = document.getElementById('helpResourceCards');
+    var label = document.getElementById('helpResourcesLabel');
+    if (!grid) return;
+    if (label) label.textContent = 'Resources — ' + (AGENT_NAMES[agentKey] || agentKey);
+    grid.innerHTML = '';
+    var agentLinks = (_links && _links[agentKey]) ? _links[agentKey] : {};
+    CARDS.forEach(function (def, i) {
+      grid.appendChild(makeCard(def, agentLinks[def.key] || '', i));
+    });
+  }
+
+  function selectAgent(key) {
+    _activeAgent = key;
+    document.querySelectorAll('#helpAgentSelector .has-btn').forEach(function (btn) {
+      btn.classList.toggle('active', btn.dataset.key === key);
+    });
+    renderCards(key);
+  }
+
+  function attachButtons() {
+    document.querySelectorAll('#helpAgentSelector .has-btn').forEach(function (btn) {
+      btn.addEventListener('click', function () { selectAgent(btn.dataset.key); });
+    });
+  }
+
+  function initHelp() {
+    attachButtons();
+    selectAgent('PAY_STK'); // render cards immediately with empty links
+
+    fetch('/api/help-links', { credentials: 'include' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data && data.ok && data.links) {
+          _links = data.links;
+          renderCards(_activeAgent); // re-render with real URLs
+        }
+      })
+      .catch(function (e) { console.warn('[help] fetch failed:', e.message); });
+  }
+
+  // Register for sections.js
+  window.__sectionInit = window.__sectionInit || {};
+  window.__sectionInit.help = initHelp;
+
+})();
+</script>

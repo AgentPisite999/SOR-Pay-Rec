@@ -94,8 +94,8 @@
 
 # def drop_fully_blank_rows(df4: pd.DataFrame) -> pd.DataFrame:
 #     df4 = df4.copy()
-#     df4["Customer Name"] = df4["Customer Name"].astype(str).fillna("").str.strip()
-#     df4["Barcode"] = df4["Barcode"].astype(str).fillna("").str.strip()
+#     df4["Customer Name"] = df4["Customer Name"].fillna("").astype(str).str.strip()
+#     df4["Barcode"] = df4["Barcode"].fillna("").astype(str).str.strip()
 
 #     mask_any = (
 #         df4["Customer Name"].ne("")
@@ -138,27 +138,27 @@
 
 #     if fixed == "Flipkart":
 #         qty_col = pick_first_existing(col_map, ["soh", "soh qty"])
-#         customer_series = pd.Series(["Flipkart"] * len(df))
+#         customer_series = pd.Series(["Flipkart"] * len(df), index=df.index)
 
 #     elif fixed == "Myntra":
 #         qty_col = pick_first_existing(col_map, ["count_", "count"])
-#         customer_series = pd.Series(["Myntra"] * len(df))
+#         customer_series = pd.Series(["Myntra"] * len(df), index=df.index)
 
 #     elif fixed == "Reliance Ajio SOR":
 #         qty_col = pick_first_existing(col_map, ["count_", "count", "active qty", "active_qty"])
-#         customer_series = pd.Series(["Reliance Ajio SOR"] * len(df))
+#         customer_series = pd.Series(["Reliance Ajio SOR"] * len(df), index=df.index)
 
 #     else:
 #         partner_col = pick_first_existing(col_map, ["partner", "partner name"])
 #         qty_col = pick_first_existing(col_map, ["closing stock", "closing_stock"])
 #         customer_series = (
-#             df[partner_col].astype(str).fillna("").str.strip()
-#             if partner_col else pd.Series([""] * len(df))
+#             df[partner_col].fillna("").astype(str).str.strip()
+#             if partner_col else pd.Series([""] * len(df), index=df.index)
 #         )
 
-#     barcode_series = df[barcode_col].map(normalize_ean) if barcode_col else pd.Series([""] * len(df))
-#     qty_series = to_num(df[qty_col]) if qty_col else pd.Series([pd.NA] * len(df))
-#     mrp_series = to_num(df[mrp_col]) if mrp_col else pd.Series([pd.NA] * len(df))
+#     barcode_series = df[barcode_col].map(normalize_ean) if barcode_col else pd.Series([""] * len(df), index=df.index)
+#     qty_series = to_num(df[qty_col]) if qty_col else pd.Series([pd.NA] * len(df), index=df.index)
+#     mrp_series = to_num(df[mrp_col]) if mrp_col else pd.Series([pd.NA] * len(df), index=df.index)
 
 #     out = pd.DataFrame({
 #         "Customer Name": customer_series,
@@ -359,11 +359,21 @@
 # # -------------------- 2) Margin rules + COGS map --------------------
 # STOP_WORDS = {
 #     "PVT", "PRIVATE", "LTD", "LIMITED", "LLP", "INDIA",
-#     "INTERNATIONAL", "GLOBAL", "VENTURE", "PVT.", "LTD."
+#     "INTERNATIONAL", "GLOBAL", "VENTURE", "PVT.", "LTD.",
+#     "THE", "AND"
+# }
+
+# GENERIC_AMBIGUOUS_TOKENS = {
+#     "RELIANCE", "RETAIL", "STORE", "SHOP", "ONLINE", "SOR"
 # }
 
 # def norm_name(s: str) -> str:
-#     return re.sub(r"[^A-Z0-9]+", " ", str(s or "").upper()).strip()
+#     s = str(s or "").upper().strip()
+#     s = s.replace("&", " AND ")
+#     s = re.sub(r"[_\-/\\]+", " ", s)
+#     s = re.sub(r"[^A-Z0-9 ]+", " ", s)
+#     s = re.sub(r"\s+", " ", s).strip()
+#     return s
 
 # def singular_word(w: str) -> str:
 #     if len(w) > 3 and w.endswith("S"):
@@ -371,7 +381,7 @@
 #     return w
 
 # def tokenize(normed: str):
-#     toks = [t.strip() for t in normed.split(" ") if t.strip()]
+#     toks = [t.strip() for t in str(normed).split(" ") if t.strip()]
 #     toks = [singular_word(t) for t in toks]
 #     toks = [t for t in toks if t and t not in STOP_WORDS]
 #     return toks
@@ -398,6 +408,87 @@
 #     except:
 #         return ""
 
+# def generate_aliases(master_name_raw: str):
+#     """
+#     Build safe aliases for a master customer.
+#     Returns normalized alias strings.
+#     """
+#     raw = str(master_name_raw or "").strip()
+#     if not raw:
+#         return set()
+
+#     aliases = set()
+
+#     full_norm = norm_name(raw)
+#     if full_norm:
+#         aliases.add(full_norm)
+
+#     split_parts = [p.strip() for p in re.split(r"[_\-/\\]+", raw) if p.strip()]
+#     for p in split_parts:
+#         pn = norm_name(p)
+#         if pn:
+#             aliases.add(pn)
+
+#     full_upper = full_norm
+
+#     if full_upper == "RELIANCE CENTRO":
+#         aliases.update({
+#             "CENTRO",
+#             "RELIANCE CENTRO",
+#         })
+
+#     elif full_upper == "RELIANCE AJIO SOR":
+#         aliases.update({
+#             "AJIO",
+#             "AJIO SOR",
+#             "RELIANCE AJIO",
+#             "RELIANCE AJIO SOR",
+#         })
+
+#     elif full_upper == "LEAYAN ZUUP":
+#         aliases.update({
+#             "LEAYAN",
+#             "ZUUP",
+#             "LEAYAN ZUUP",
+#         })
+
+#     return {a for a in aliases if a}
+
+# def build_margin_index(df_m: pd.DataFrame, cust_col: str, margin_col: str):
+#     """
+#     Creates:
+#     1) exact_map -> exact normalized alias to margin
+#     2) token_rules -> strong token-based rules
+#     """
+#     exact_map = {}
+#     token_rules = []
+
+#     for _, row in df_m.iterrows():
+#         master_name_raw = str(row.get(cust_col, "")).strip()
+#         if not master_name_raw:
+#             continue
+
+#         margin_val = to_percent_number(row.get(margin_col, ""))
+#         if margin_val == "":
+#             continue
+
+#         aliases = generate_aliases(master_name_raw)
+
+#         for alias in aliases:
+#             exact_map[alias] = float(margin_val)
+
+#             toks = tokenize(alias)
+#             if toks:
+#                 token_rules.append({
+#                     "alias": alias,
+#                     "tokens": set(toks),
+#                     "margin": float(margin_val),
+#                     "score": len(set(toks)) * 1000 + len(alias),
+#                 })
+
+#     token_rules.sort(key=lambda r: r["score"], reverse=True)
+#     return exact_map, token_rules
+
 # def load_margin_rules_and_cogs_map():
 #     load_dotenv()
 #     source_spreadsheet_id = env_clean(os.getenv("SOURCE_SPREADSHEET_ID1", ""))
@@ -421,36 +512,7 @@
 #     if not cust_col or not margin_col:
 #         raise RuntimeError("Margin sheet must have columns: Customer Name, Margin")
 
-#     rules = []
-#     for _, row in df_m.iterrows():
-#         master_name_raw = str(row.get(cust_col, "")).strip()
-#         if not master_name_raw:
-#             continue
-#         margin_val = to_percent_number(row.get(margin_col, ""))
-#         if margin_val == "":
-#             continue
-
-#         key_norm = norm_name(master_name_raw.replace("_", " "))
-#         toks = tokenize(key_norm)
-#         if toks:
-#             rules.append({
-#                 "tokens": set(toks),
-#                 "margin": float(margin_val),
-#                 "score": len(toks) * 1000 + len(key_norm),
-#             })
-
-#         if "_" in master_name_raw:
-#             alias = master_name_raw.split("_")[0]
-#             alias_norm = norm_name(alias)
-#             alias_toks = tokenize(alias_norm)
-#             if alias_toks:
-#                 rules.append({
-#                     "tokens": set(alias_toks),
-#                     "margin": float(margin_val),
-#                     "score": len(alias_toks) * 1000 + len(alias_norm),
-#                 })
-
-#     rules.sort(key=lambda r: r["score"], reverse=True)
+#     margin_exact_map, margin_token_rules = build_margin_index(df_m, cust_col, margin_col)
 
 #     ws_c = sh.worksheet(cogs_sheet_name)
 #     df_c = worksheet_to_df(ws_c)
@@ -471,9 +533,63 @@
 #         val = pd.to_numeric(row.get(cogs_col, ""), errors="coerce")
 #         cogs_map[bc] = float(val) if pd.notna(val) else row.get(cogs_col, "")
 
-#     return rules, cogs_map
+#     return margin_exact_map, margin_token_rules, cogs_map
 
-# def apply_margin_and_cogs(df_base: pd.DataFrame, margin_rules, cogs_map) -> pd.DataFrame:
+# def resolve_margin(customer_name: str, margin_exact_map, margin_token_rules):
+#     """
+#     Matching priority:
+#     1. exact normalized match
+#     2. exact alias match
+#     3. safe token subset match
+#     4. ambiguous -> blank
+#     """
+#     cn_norm = norm_name(customer_name)
+#     if not cn_norm:
+#         return ""
+
+#     if cn_norm in margin_exact_map:
+#         return margin_exact_map[cn_norm]
+
+#     tokset = set(tokenize(cn_norm))
+#     if not tokset:
+#         return ""
+
+#     if len(tokset) == 1 and list(tokset)[0] in GENERIC_AMBIGUOUS_TOKENS:
+#         return ""
+
+#     matches = []
+#     for rule in margin_token_rules:
+#         rule_tokens = rule["tokens"]
+
+#         if tokset == rule_tokens:
+#             matches.append(rule)
+#             continue
+
+#         if rule_tokens.issubset(tokset):
+#             matches.append(rule)
+#             continue
+
+#         if tokset.issubset(rule_tokens):
+#             if len(tokset) == 1:
+#                 only_tok = next(iter(tokset))
+#                 if only_tok in GENERIC_AMBIGUOUS_TOKENS:
+#                     continue
+#             matches.append(rule)
+
+#     if not matches:
+#         return ""
+
+#     matches.sort(key=lambda x: x["score"], reverse=True)
+
+#     if len(matches) > 1:
+#         top = matches[0]
+#         second = matches[1]
+#         if top["score"] == second["score"] and top["margin"] != second["margin"]:
+#             return ""
+
+#     return matches[0]["margin"]
+
+# def apply_margin_and_cogs(df_base: pd.DataFrame, margin_exact_map, margin_token_rules, cogs_map) -> pd.DataFrame:
 #     df = df_base.copy()
 
 #     if "Margin %" not in df.columns:
@@ -481,20 +597,9 @@
 #     if "COGS Rate" not in df.columns:
 #         df["COGS Rate"] = ""
 
-#     cust_norm = df["Customer Name"].fillna("").astype(str).map(norm_name)
-
-#     def match_margin(cn: str):
-#         if not cn.strip():
-#             return ""
-#         tokset = set(tokenize(cn))
-#         if not tokset:
-#             return ""
-#         for rule in margin_rules:
-#             if rule["tokens"].issubset(tokset):
-#                 return rule["margin"]
-#         return ""
-
-#     df["Margin %"] = cust_norm.map(match_margin)
+#     df["Margin %"] = df["Customer Name"].fillna("").astype(str).map(
+#         lambda x: resolve_margin(x, margin_exact_map, margin_token_rules)
+#     )
 
 #     bcs = df["Barcode"].fillna("").astype(str).map(normalize_ean)
 #     df["COGS Rate"] = bcs.map(lambda b: cogs_map.get(b, ""))
@@ -620,8 +725,12 @@
 #     if not input_dir.exists():
 #         raise FileNotFoundError(f"Input folder not found: {input_dir}")
 
-#     margin_rules, cogs_map = load_margin_rules_and_cogs_map()
-#     print(f"Loaded margin rules: {len(margin_rules)}, cogs rows: {len(cogs_map)}")
+#     margin_exact_map, margin_token_rules, cogs_map = load_margin_rules_and_cogs_map()
+#     print(
+#         f"Loaded margin aliases: {len(margin_exact_map)}, "
+#         f"margin token rules: {len(margin_token_rules)}, "
+#         f"cogs rows: {len(cogs_map)}"
+#     )
 
 #     files = []
 #     for ext in ("*.xlsx", "*.xls", "*.xlsb", "*.csv"):
@@ -652,7 +761,7 @@
 
 #     df_base = pd.concat(parts, ignore_index=True)
 
-#     df_enriched = apply_margin_and_cogs(df_base, margin_rules, cogs_map)
+#     df_enriched = apply_margin_and_cogs(df_base, margin_exact_map, margin_token_rules, cogs_map)
 #     df_final = calc_billing_and_reorder(df_enriched)
 #     pivot_df = generate_pivot(df_final)
 
@@ -696,6 +805,8 @@
 
 # if __name__ == "__main__":
 #     main()
+
+
 
 
 import os
@@ -1107,10 +1218,6 @@ def to_percent_number(v):
         return ""
 
 def generate_aliases(master_name_raw: str):
-    """
-    Build safe aliases for a master customer.
-    Returns normalized alias strings.
-    """
     raw = str(master_name_raw or "").strip()
     if not raw:
         return set()
@@ -1153,11 +1260,6 @@ def generate_aliases(master_name_raw: str):
     return {a for a in aliases if a}
 
 def build_margin_index(df_m: pd.DataFrame, cust_col: str, margin_col: str):
-    """
-    Creates:
-    1) exact_map -> exact normalized alias to margin
-    2) token_rules -> strong token-based rules
-    """
     exact_map = {}
     token_rules = []
 
@@ -1234,13 +1336,6 @@ def load_margin_rules_and_cogs_map():
     return margin_exact_map, margin_token_rules, cogs_map
 
 def resolve_margin(customer_name: str, margin_exact_map, margin_token_rules):
-    """
-    Matching priority:
-    1. exact normalized match
-    2. exact alias match
-    3. safe token subset match
-    4. ambiguous -> blank
-    """
     cn_norm = norm_name(customer_name)
     if not cn_norm:
         return ""
@@ -1419,6 +1514,10 @@ def main():
 
     month = (args.month or "").strip().upper()
     year = (args.year or "").strip()
+
+    # ✅ Signal data period to server.js for Drive folder naming
+    if month and year:
+        print(f"PERIOD: {month}-{year}")
 
     if not input_dir.exists():
         raise FileNotFoundError(f"Input folder not found: {input_dir}")
