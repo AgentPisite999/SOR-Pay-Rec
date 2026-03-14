@@ -31,7 +31,6 @@
     </div>
 
     <div class="top-right">
-      <!-- Console running indicator (shown when agent is running) -->
       <div class="run-indicator" id="runIndicator" style="display:none">
         <div class="run-dot"></div>
         <span class="run-label">Agent running...</span>
@@ -83,7 +82,6 @@
           <span class="sb-item-label">Reports</span>
         </button>
 
-        <!-- ✅ NEW: Base Dump -->
         <button class="sb-item" data-page="basedump" type="button">
           <span class="sb-item-icon">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><polyline points="9 14 12 17 15 14"/></svg>
@@ -105,6 +103,7 @@
           </span>
           <span class="sb-item-label">Help &amp; Format</span>
         </button>
+
       </nav>
 
       <div class="sb-footer">
@@ -138,10 +137,10 @@
   <script src="/js/app.js"></script>
   <script src="/js/report.js"></script>
   <script src="/js/basedump.js"></script>
+  <script src="/js/help.js"></script>
   <script src="/js/sections.js"></script>
 
   <script>
-    // ─── Mobile sidebar toggle ───
     (function () {
       const btn     = document.getElementById("btnNav");
       const sidebar = document.getElementById("sidebar");
@@ -164,7 +163,6 @@
       });
     })();
 
-    // ─── Console run indicator (survives tab switching) ───
     (function () {
       const indicator  = document.getElementById("runIndicator");
       const liveTag    = document.getElementById("consoleRunTag");

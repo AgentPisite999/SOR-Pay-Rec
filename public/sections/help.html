@@ -74,8 +74,6 @@
   height: 1px;
   background: var(--border);
 }
-
-/* ── agent selector ── */
 .help-agent-selector {
   display: flex;
   flex-wrap: wrap;
@@ -117,8 +115,6 @@
   padding: 2px 6px;
   margin-left: 2px;
 }
-
-/* ── resource cards ── */
 .help-resource-cards {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -126,7 +122,6 @@
   margin-bottom: 24px;
   min-height: 200px;
 }
-
 .hrc-card {
   background: var(--panel);
   border: 1px solid var(--border);
@@ -142,19 +137,12 @@
   transform: translateY(10px);
   transition: border-color 0.15s, transform 0.3s ease, opacity 0.3s ease;
 }
-.hrc-card.hrc-in {
-  opacity: 1;
-  transform: translateY(0);
-}
+.hrc-card.hrc-in { opacity: 1; transform: translateY(0); }
 .hrc-card.hrc-link { cursor: pointer; }
-.hrc-card.hrc-link:hover {
-  border-color: var(--border-bright);
-  transform: translateY(-2px);
-}
+.hrc-card.hrc-link:hover { border-color: var(--border-bright); transform: translateY(-2px); }
 .hrc-card.hrc-nolink { cursor: default; }
 .hrc-card.hrc-nolink .hrc-icon-wrap { opacity: 0.4; }
 .hrc-card.hrc-nolink .hrc-title { color: var(--text-muted); }
-
 .hrc-card::before {
   content: '';
   position: absolute;
@@ -167,7 +155,6 @@
 .hrc-master::before  { background: var(--amber); }
 .hrc-format::before  { background: #4caf7d; }
 .hrc-process::before { background: #5b8dee; }
-
 .hrc-icon-wrap {
   width: 44px; height: 44px;
   border-radius: var(--radius);
@@ -177,12 +164,7 @@
   font-size: 20px;
   background: rgba(255,255,255,0.03);
 }
-.hrc-title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text);
-  margin-bottom: 5px;
-}
+.hrc-title { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 5px; }
 .hrc-desc {
   font-family: 'JetBrains Mono', monospace;
   font-size: 10.5px;
@@ -207,7 +189,6 @@
 .hrc-format  .hrc-action-label { color: #4caf7d; }
 .hrc-process .hrc-action-label { color: #5b8dee; }
 .hrc-nolink  .hrc-action-label { color: var(--text-sub); }
-
 .hrc-arrow-btn {
   width: 26px; height: 26px;
   border-radius: 50%;
@@ -219,7 +200,6 @@
   flex-shrink: 0;
 }
 .hrc-link:hover .hrc-arrow-btn { border-color: var(--border-bright); color: var(--text); }
-
 .hrc-not-set-badge {
   position: absolute;
   top: 12px; right: 12px;
@@ -231,7 +211,6 @@
   border: 1px solid var(--border);
   color: var(--text-sub);
 }
-
 .help-footer-note {
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
@@ -241,7 +220,6 @@
   line-height: 1.8;
   border-top: 1px solid var(--border);
 }
-
 @media (max-width: 900px) {
   .help-resource-cards { grid-template-columns: 1fr; }
 }
@@ -249,111 +227,3 @@
   .has-btn .has-label { display: none; }
 }
 </style>
-
-<script>
-(function () {
-
-  var AGENT_NAMES = {
-    PAY_STK:  'Payable Stock',
-    PAY_TD:   'Payable Trade Discount',
-    REC_STK:  'Receivable Stock',
-    REC_TD:   'Receivable Trade Discount',
-    PRI_SALE: 'Primary Sale',
-  };
-
-  var CARDS = [
-    {
-      type:  'master',
-      icon:  '🗂️',
-      title: 'Update Master Data',
-      desc:  'Open the master Google Sheet used by this agent — Margin, HSN, COGS, deductions and other reference data.',
-      label: 'Open Master Sheet',
-      key:   'master',
-    },
-    {
-      type:  'format',
-      icon:  '📋',
-      title: 'Download Input Format',
-      desc:  'Download the blank Excel / CSV template with the correct headers and column structure for uploading to this agent.',
-      label: 'Download Template',
-      key:   'format',
-    },
-    {
-      type:  'process',
-      icon:  '📖',
-      title: 'Process Document',
-      desc:  'Step-by-step SOP for preparing input files, running this agent, verifying outputs, and resolving common errors.',
-      label: 'Open Process Doc',
-      key:   'process',
-    },
-  ];
-
-  var SVG_ARROW = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg>';
-
-  var _links       = {};
-  var _activeAgent = 'PAY_STK';
-
-  function makeCard(def, url, idx) {
-    var hasUrl = typeof url === 'string' && url.trim() !== '';
-    var el     = document.createElement(hasUrl ? 'a' : 'div');
-    el.className = 'hrc-card hrc-' + def.type + ' ' + (hasUrl ? 'hrc-link' : 'hrc-nolink');
-    if (hasUrl) { el.href = url.trim(); el.target = '_blank'; el.rel = 'noopener'; }
-    el.innerHTML =
-      (hasUrl ? '' : '<span class="hrc-not-set-badge">Not configured</span>') +
-      '<div class="hrc-icon-wrap">' + def.icon + '</div>' +
-      '<div><div class="hrc-title">' + def.title + '</div><div class="hrc-desc">' + def.desc + '</div></div>' +
-      '<div class="hrc-footer">' +
-        '<span class="hrc-action-label">' + (hasUrl ? def.label : 'Not configured') + '</span>' +
-        '<span class="hrc-arrow-btn">' + SVG_ARROW + '</span>' +
-      '</div>';
-    setTimeout(function () { el.classList.add('hrc-in'); }, 30 + idx * 80);
-    return el;
-  }
-
-  function renderCards(agentKey) {
-    var grid  = document.getElementById('helpResourceCards');
-    var label = document.getElementById('helpResourcesLabel');
-    if (!grid) return;
-    if (label) label.textContent = 'Resources — ' + (AGENT_NAMES[agentKey] || agentKey);
-    grid.innerHTML = '';
-    var agentLinks = (_links && _links[agentKey]) ? _links[agentKey] : {};
-    CARDS.forEach(function (def, i) {
-      grid.appendChild(makeCard(def, agentLinks[def.key] || '', i));
-    });
-  }
-
-  function selectAgent(key) {
-    _activeAgent = key;
-    document.querySelectorAll('#helpAgentSelector .has-btn').forEach(function (btn) {
-      btn.classList.toggle('active', btn.dataset.key === key);
-    });
-    renderCards(key);
-  }
-
-  function attachButtons() {
-    document.querySelectorAll('#helpAgentSelector .has-btn').forEach(function (btn) {
-      btn.addEventListener('click', function () { selectAgent(btn.dataset.key); });
-    });
-  }
-
-  function initHelp() {
-    attachButtons();
-    selectAgent('PAY_STK'); // render cards immediately with empty links
-
-    fetch('/api/help-links', { credentials: 'include' })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data && data.ok && data.links) {
-          _links = data.links;
-          renderCards(_activeAgent); // re-render with real URLs
-        }
-      })
-      .catch(function (e) { console.warn('[help] fetch failed:', e.message); });
-  }
-
-  // Register for sections.js
-  window.__sectionInit = window.__sectionInit || {};
-  window.__sectionInit.help = initHelp;
-
-})();
-</script>
