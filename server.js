@@ -528,9 +528,7 @@
 //   console.log(`[server] Running at http://localhost:${PORT}`);
 // });
 
-
 import "./env.js";
-
 import express from "express";
 import multer from "multer";
 import fs from "fs";
@@ -538,17 +536,15 @@ import path from "path";
 import os from "os";
 import { spawn } from "child_process";
 import { google } from "googleapis";
-
 import session from "express-session";
 import passport from "./auth/passport.js";
 import authRoutes from "./auth/authRoutes.js";
 import { requireAuth } from "./middleware/requireAuth.js";
-
 import { fileURLToPath } from "url";
+import archiver from "archiver";
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-
-import archiver from "archiver";
 
 const app = express();
 
@@ -564,7 +560,11 @@ const PYTHON_BIN = process.env.PYTHON_BIN || "python3";
 const DRIVE_ROOT_FOLDER_ID = process.env.DRIVE_ROOT_FOLDER_ID;
 const REPORT_SHEET_ID = process.env.REPORT_SHEET_ID;
 const BASE_DUMP_FOLDER_ID = process.env.BASE_DUMP_FOLDER_ID;
-const DRIVE_OPTS = { supportsAllDrives: true, includeItemsFromAllDrives: true };
+
+const DRIVE_OPTS = {
+  supportsAllDrives: true,
+  includeItemsFromAllDrives: true,
+};
 
 if (isProd && !process.env.SESSION_SECRET) {
   throw new Error("SESSION_SECRET is required in production");
@@ -601,6 +601,7 @@ function _loadJobs() {
       fs.unlinkSync(JOBS_FILE);
     } catch {}
   }
+
   return new Map();
 }
 
@@ -663,6 +664,7 @@ function createJob({ req, project, runId }) {
     createdAt: nowISO(),
     updatedAt: nowISO(),
   };
+
   JOBS.set(jobId, job);
   _saveJobs(JOBS);
   return job;
@@ -679,12 +681,31 @@ function addLog(job, line) {
   if (!s) return;
 
   job.logs.push(s);
-  if (job.logs.length > 600) {
-    job.logs = job.logs.slice(-600);
+  if (job.logs.length > 150) {
+    job.logs = job.logs.slice(-150);
   }
 
   job.updatedAt = nowISO();
   _saveJobs(JOBS);
+}
+
+function hasRunningJob() {
+  for (const [, job] of JOBS) {
+    if (job.status === "queued" || job.status === "running" || job.status === "uploading") {
+      return true;
+    }
+  }
+  return false;
+}
+
+function logMemory(prefix = "") {
+  const m = process.memoryUsage();
+  console.log(
+    `[mem] ${prefix} rss=${Math.round(m.rss / 1024 / 1024)}MB ` +
+      `heapUsed=${Math.round(m.heapUsed / 1024 / 1024)}MB ` +
+      `heapTotal=${Math.round(m.heapTotal / 1024 / 1024)}MB ` +
+      `external=${Math.round(m.external / 1024 / 1024)}MB`
+  );
 }
 
 // -------------------------
@@ -722,7 +743,11 @@ app.use("/auth", authRoutes);
 // -------------------------
 // STATIC FILES
 // -------------------------
-app.use(express.static(path.join(__dirname, "public"), { index: false }));
+app.use(
+  express.static(path.join(__dirname, "public"), {
+    index: false,
+  })
+);
 
 // -------------------------
 // PAGES
@@ -742,7 +767,13 @@ app.get("/me", requireAuth, (req, res) => {
 // -------------------------
 // MULTER
 // -------------------------
-const upload = multer({ dest: path.join(os.tmpdir(), "uploads") });
+const upload = multer({
+  dest: path.join(os.tmpdir(), "uploads"),
+  limits: {
+    fileSize: 100 * 1024 * 1024, // 100 MB per file
+    files: 10, // max 10 files
+  },
+});
 
 // -------------------------
 // PROJECT CONFIG
@@ -815,7 +846,9 @@ function makeRunIdIST() {
   const get = (t) => parts.find((p) => p.type === t)?.value;
   const ms = String(now.getMilliseconds()).padStart(3, "0");
 
-  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}-${get("minute")}-${get("second")}-${ms}+05-30`;
+  return `${get("year")}-${get("month")}-${get("day")}T${get("hour")}-${get("minute")}-${get(
+    "second"
+  )}-${ms}+05-30`;
 }
 
 function getServiceAccountJson() {
@@ -994,7 +1027,7 @@ app.get("/api/job-status", requireAuth, (req, res) => {
     hint: job.hint,
     outputs: job.outputs,
     error: job.error,
-    logs: job.logs.slice(-200),
+    logs: job.logs.slice(-100),
     updatedAt: job.updatedAt,
   });
 });
@@ -1026,7 +1059,6 @@ app.get("/api/report-data", async (req, res) => {
     }
 
     const sa = getServiceAccountJson();
-
     const authClient = new google.auth.GoogleAuth({
       credentials: {
         client_email: sa.client_email,
@@ -1123,6 +1155,13 @@ app.post("/run/:project", requireAuth, upload.array("files"), async (req, res) =
       });
     }
 
+    if (hasRunningJob()) {
+      return res.status(429).json({
+        ok: false,
+        error: "Another job is already running. Please wait until it finishes.",
+      });
+    }
+
     const month = cleanMonthYear(req.body?.month).toUpperCase();
     const year = cleanMonthYear(req.body?.year);
 
@@ -1148,6 +1187,7 @@ app.post("/run/:project", requireAuth, upload.array("files"), async (req, res) =
         }
 
         addLog(job, `-> Files: ${req.files.length} file(s)`);
+        logMemory("before drive init");
 
         const drive = getDriveClient();
 
@@ -1161,6 +1201,7 @@ app.post("/run/:project", requireAuth, upload.array("files"), async (req, res) =
         baseTmp = fs.mkdtempSync(path.join(os.tmpdir(), "job-"));
         const inDir = path.join(baseTmp, "input");
         const outDir = path.join(baseTmp, "output");
+
         fs.mkdirSync(inDir);
         fs.mkdirSync(outDir);
 
@@ -1181,6 +1222,7 @@ app.post("/run/:project", requireAuth, upload.array("files"), async (req, res) =
 
         setJob(job, { pct: 30, hint: "Running agent…" });
         addLog(job, "-> Processing started…");
+        logMemory("before python");
 
         if (cfg.mode === "single") {
           const inputFile = path.join(inDir, req.files[0].originalname);
@@ -1209,18 +1251,19 @@ app.post("/run/:project", requireAuth, upload.array("files"), async (req, res) =
           await runPython(scriptAbs, args, job);
         }
 
+        logMemory("after python");
+
         const period = extractPeriodFromLogs(job.logs);
         addLog(
           job,
-          period
-            ? `-> Data period detected: ${period}`
-            : "-> Data period not detected, using plain runId"
+          period ? `-> Data period detected: ${period}` : "-> Data period not detected, using plain runId"
         );
 
         const outputFolderName = makeRunFolderName(runId, period);
         const outputRunId = await ensureFolder(drive, outputRootId, outputFolderName);
 
         setJob(job, { status: "uploading", pct: 90, hint: "Uploading outputs…" });
+        logMemory("before output upload");
 
         const outputFiles = fs.readdirSync(outDir);
         const uploaded = [];
@@ -1232,6 +1275,9 @@ app.post("/run/:project", requireAuth, upload.array("files"), async (req, res) =
         }
 
         job.outputs = uploaded;
+
+        logMemory("after output upload");
+
         setJob(job, { status: "done", pct: 100, hint: "Completed" });
         addLog(job, "-> Completed");
       } catch (e) {
@@ -1253,10 +1299,39 @@ app.post("/run/:project", requireAuth, upload.array("files"), async (req, res) =
 });
 
 // -------------------------
+// UPLOAD ERROR HANDLER
+// -------------------------
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+    if (err.code === "LIMIT_FILE_SIZE") {
+      return res.status(400).json({
+        ok: false,
+        error: "One or more files exceed the 100 MB limit.",
+      });
+    }
+
+    if (err.code === "LIMIT_FILE_COUNT") {
+      return res.status(400).json({
+        ok: false,
+        error: "Too many files uploaded. Maximum allowed is 10 files.",
+      });
+    }
+
+    return res.status(400).json({
+      ok: false,
+      error: `Upload error: ${err.message}`,
+    });
+  }
+
+  return next(err);
+});
+
+// -------------------------
 // BASE DUMP ROUTES
 // -------------------------
 async function listDriveFolder(drive, folderId) {
   const q = `'${folderId}' in parents and trashed=false`;
+
   const res = await drive.files.list({
     q,
     fields: "files(id,name,mimeType,size,modifiedTime)",
@@ -1264,6 +1339,7 @@ async function listDriveFolder(drive, folderId) {
     pageSize: 200,
     ...DRIVE_OPTS,
   });
+
   return res.data.files || [];
 }
 
@@ -1318,8 +1394,8 @@ app.get("/api/basedump/runs", requireAuth, async (req, res) => {
       const period = periodMatch ? periodMatch[1].toUpperCase() : null;
 
       const label = period
-        ? `${match[3]}/${match[2]}/${match[1]}  ${match[4]}:${match[5]}:${match[6]} IST  [${period}]`
-        : `${match[3]}/${match[2]}/${match[1]}  ${match[4]}:${match[5]}:${match[6]} IST`;
+        ? `${match[3]}/${match[2]}/${match[1]} ${match[4]}:${match[5]}:${match[6]} IST [${period}]`
+        : `${match[3]}/${match[2]}/${match[1]} ${match[4]}:${match[5]}:${match[6]} IST`;
 
       return {
         year: match[1],
@@ -1335,7 +1411,11 @@ app.get("/api/basedump/runs", requireAuth, async (req, res) => {
 
     let runs = runFolders
       .filter((f) => f.mimeType === "application/vnd.google-apps.folder")
-      .map((f) => ({ id: f.id, name: f.name, parsed: parseRunFolder(f.name) }))
+      .map((f) => ({
+        id: f.id,
+        name: f.name,
+        parsed: parseRunFolder(f.name),
+      }))
       .filter((r) => r.parsed !== null);
 
     const fm = (month || "").trim();
@@ -1372,6 +1452,7 @@ app.get("/api/basedump/zip", requireAuth, async (req, res) => {
     }
 
     const zipName = (folderName || folderId) + ".zip";
+
     res.setHeader("Content-Type", "application/zip");
     res.setHeader("Content-Disposition", `attachment; filename="${zipName}"`);
 
@@ -1380,9 +1461,14 @@ app.get("/api/basedump/zip", requireAuth, async (req, res) => {
 
     for (const file of fileItems) {
       const stream = await drive.files.get(
-        { fileId: file.id, alt: "media", ...DRIVE_OPTS },
+        {
+          fileId: file.id,
+          alt: "media",
+          ...DRIVE_OPTS,
+        },
         { responseType: "stream" }
       );
+
       archive.append(stream.data, { name: file.name });
     }
 
