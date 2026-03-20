@@ -1,5 +1,6 @@
 
 
+
 # import os
 # import re
 # import json
@@ -1127,6 +1128,12 @@
 #     # Step 7
 #     final_report_df = generate_final_report(final_df)
 
+#     # ✅ Signal data period to server.js for Drive folder naming
+#     if not final_report_df.empty:
+#         mon, yr = parse_month_year_label(str(final_report_df.iloc[0]["Month"]))
+#         if mon and yr:
+#             print(f"PERIOD: {mon}-{yr}")
+
 #     # Step 8
 #     final_df = add_section2_from_category(final_df)
 
@@ -1200,6 +1207,10 @@
 
 # if __name__ == "__main__":
 #     main()
+
+
+
+
 
 
 import os
@@ -1584,25 +1595,34 @@ def calculate_payable_data(df: pd.DataFrame) -> pd.DataFrame:
     if miss:
         raise KeyError(f"Missing required columns for Payable step: {miss}")
 
-    df["MRP"]              = to_num(df["MRP"])
-    df["RSP"]              = to_num(df["RSP"])
-    df["Bill Qty"]         = to_num(df["Bill Qty"])
+    df["MRP"]               = to_num(df["MRP"])
+    df["RSP"]               = to_num(df["RSP"])
+    df["Bill Qty"]          = to_num(df["Bill Qty"])
     df["Bill Promo Amount"] = to_num(df["Bill Promo Amount"])
 
-    party_s      = df[party_col].astype(str).str.lower()
-    brand_s      = df["Brand"].astype(str).str.lower()
     promo_name_s = df["Bill Promo Name"].astype(str).str.strip().str.upper()
 
-    # Gross Sales
-    gross     = df["MRP"] * df["Bill Qty"]
+    # Gross Sales = RSP × Bill Qty
+    # Fix: if both RSP and Qty are negative, the product wrongly becomes positive
+    # (return transaction should stay negative). Flip RSP sign in that case.
+    party_s = df[party_col].astype(str).str.lower()
+    brand_s = df["Brand"].astype(str).str.lower()
+
+    # Fix both-negative: if MRP and Qty both negative, result wrongly becomes positive
+    mrp_adj = df["MRP"].where(~((df["MRP"] < 0) & (df["Bill Qty"] < 0)), -df["MRP"])
+    gross = mrp_adj * df["Bill Qty"]
+
+    # Agilitas/Lotto exception — use RSP instead of MRP
+    rsp_adj = df["RSP"].where(~((df["RSP"] < 0) & (df["Bill Qty"] < 0)), -df["RSP"])
     exception = (
         party_s.str.contains("agilitas brands private limited", na=False)
         & brand_s.str.contains("lotto", na=False)
     )
-    gross.loc[exception] = (df["RSP"] * df["Bill Qty"]).loc[exception]
+    gross.loc[exception] = (rsp_adj * df["Bill Qty"]).loc[exception]
 
-    # Discount — zero out INC5 promos
-    discount = df["Bill Promo Amount"].copy()
+    # Discount = Bill Promo Amount + (MRP - RSP)
+    # Zero out INC5 promos entirely
+    discount = df["Bill Promo Amount"] + (df["MRP"] - df["RSP"])
     inc5     = promo_name_s.str.startswith("INC5", na=False)
     discount.loc[inc5] = 0.0
 
@@ -2329,7 +2349,7 @@ def main():
     # Step 7
     final_report_df = generate_final_report(final_df)
 
-    # ✅ Signal data period to server.js for Drive folder naming
+    # Signal data period to server.js for Drive folder naming
     if not final_report_df.empty:
         mon, yr = parse_month_year_label(str(final_report_df.iloc[0]["Month"]))
         if mon and yr:
