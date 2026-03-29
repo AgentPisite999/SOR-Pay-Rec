@@ -1,4 +1,5 @@
 
+
 # import os
 # import json
 # import base64
@@ -270,11 +271,6 @@
 
 
 # def load_mapping_from_gsheet() -> pd.DataFrame:
-#     """
-#     Reads mapping tab from Google Sheet.
-#     Expects columns: Party Name, Brand, Party Name1
-#     Uses GOOGLE_SHEET_ID_PAY_STK + GOOGLE_SHEET_TAB_PAYSTK env vars.
-#     """
 #     gc = get_gspread_client_readonly()
 
 #     sheet_id = _get_env_str("GOOGLE_SHEET_ID_PAY_STK")
@@ -299,11 +295,6 @@
 
 
 # def load_hsn_from_gsheet() -> pd.DataFrame:
-#     """
-#     Reads HSN tab from Google Sheet.
-#     Expected columns: Hsn Code (or HSN), Gst %
-#     Uses GOOGLE_SHEET_ID_PAY_STK + GOOGLE_SHEET_TAB_HSN env vars.
-#     """
 #     gc = get_gspread_client_readonly()
 
 #     sheet_id = _get_env_str("GOOGLE_SHEET_ID_PAY_STK")
@@ -360,21 +351,12 @@
 
 
 # def upsert_pivot_to_pay_stk_tab(df_pivot: pd.DataFrame, month, year):
-#     """
-#     Writes ONLY the pivot (Pay_Stk_Final2) into Google Sheet tab PAY_STK.
-
-#     Rules:
-#       - If same Month+Year already exists -> remove those rows, then append new rows.
-#       - Else -> append new rows at bottom.
-#       - Keeps header in row 1.
-#     """
 #     if month is None or year is None:
 #         raise ValueError("Month/Year could not be detected, cannot upsert into PAY_STK tab.")
 
 #     out_sheet_id = _get_env_str("PAY_STK_SHEET_ID")
 #     out_tab_name = _get_env_str("PAY_STK_TAB_NAME")
 
-#     # Normalize outgoing df
 #     df_out          = df_pivot.copy()
 #     df_out["Month"] = df_out["Month"].astype(str).str.strip().str.upper()
 #     df_out["Year"]  = pd.to_numeric(df_out["Year"], errors="coerce").astype("Int64")
@@ -385,7 +367,6 @@
 
 #     values = ws.get_all_values()
 
-#     # Empty sheet: write header + data
 #     if not values:
 #         payload = [df_out.columns.tolist()] + df_out.replace({np.nan: ""}).values.tolist()
 #         ws.update(payload)
@@ -405,12 +386,10 @@
 #     df_existing = pd.DataFrame(data_rows, columns=header)
 #     df_existing = _coerce_sheet_df_to_expected_types(df_existing)
 
-#     # Remove existing rows for same Month+Year
 #     df_filtered = df_existing[
 #         ~((df_existing["Month"] == str(month).upper()) & (df_existing["Year"] == int(year)))
 #     ].copy()
 
-#     # Align columns
 #     if set(df_out.columns).issubset(df_filtered.columns):
 #         df_filtered = df_filtered[df_out.columns]
 #     else:
@@ -455,13 +434,6 @@
 
 
 # def add_calculated_columns(df: pd.DataFrame, df_hsn: pd.DataFrame) -> pd.DataFrame:
-#     """
-#     Calculates Total Cost, Gst%, Gst, Actual Cost.
-
-#     GST logic:
-#       - For FOOTWEAR ACCESSORIES division: look up GST% from HSN master sheet
-#       - For all others: use Cost Rate threshold (<=2500 -> 5%, >2500 -> 18%)
-#     """
 #     df = df.copy()
 
 #     df["Cost Rate"] = pd.to_numeric(df["Cost Rate"], errors="coerce")
@@ -477,13 +449,10 @@
 
 #     df["Total Cost"] = df["Cost Rate"] * df["Qty"]
 
-#     # Merge HSN GST rates
 #     df = df.merge(df_hsn, on="HSN", how="left")
 
-#     # Default GST by cost threshold
 #     default_gst = np.where(df["Cost Rate"] <= 2500, 0.05, 0.18)
 
-#     # Footwear Accessories: use HSN lookup if available, else fall back to default
 #     footwear_acc_mask = df["Division"].str.upper().eq("FOOTWEAR ACCESSORIES")
 
 #     df["Gst%"] = np.where(
@@ -533,7 +502,7 @@
 #     required_base_cols = [
 #         "Brand",
 #         "Cost Rate",
-#         "Qty",           # Qty. will be normalized to Qty via aliases
+#         "Qty",
 #         "SOR/ Outright",
 #         "Brand/Inhouse",
 #         "Branch Name",
@@ -557,6 +526,9 @@
 
 #     month, year = find_month_year_in_sheet(input_path, sheet_used)
 #     print("Detected Month/Year from Period:", month, year)
+#     # ✅ Signal data period to server.js for Drive folder naming
+#     if month and year:
+#         print(f"PERIOD: {month}-{year}")
 
 #     # Load masters from Google Sheets
 #     df_map = load_mapping_from_gsheet()
@@ -615,7 +587,6 @@
 #     main()
 
 
-
 import os
 import json
 import base64
@@ -651,7 +622,7 @@ _load_env_once()
 
 
 # ===================== OUTPUT SHEET NAMES =====================
-BASE_SHEET_NAME_OUT  = "Pay_Stk_Base_Data"
+BASE_SHEET_NAME_OUT = "Pay_Stk_Base_Data"
 PIVOT_SHEET_NAME_OUT = "Pay_Stk_Final2"
 
 # How many top rows to scan for header row
@@ -664,16 +635,16 @@ PERIOD_SCAN_COLS = 10
 
 # ===================== COLUMN ALIASES =====================
 COLUMN_ALIASES = {
-    "Qty.":           "Qty",
-    "QTY.":           "Qty",
-    "QTY":            "Qty",
-    "Quantity":       "Qty",
-    "quantity":       "Qty",
-    "Party name":     "Party Name",
-    "Party name1":    "Party Name1",
-    "Hsn":            "HSN",
-    "Hsn Code":       "HSN",
-    "HSN Code":       "HSN",
+    "Qty.": "Qty",
+    "QTY.": "Qty",
+    "QTY": "Qty",
+    "Quantity": "Qty",
+    "quantity": "Qty",
+    "Party name": "Party Name",
+    "Party name1": "Party Name1",
+    "Hsn": "HSN",
+    "Hsn Code": "HSN",
+    "HSN Code": "HSN",
     "Brand/Inhouse ": "Brand/Inhouse",   # trailing space variant
     "SOR/ Outright ": "SOR/ Outright",   # trailing space variant
 }
@@ -682,7 +653,7 @@ COLUMN_ALIASES = {
 # ===================== CLI ARGS =====================
 def parse_args():
     ap = argparse.ArgumentParser(description="Payable Stock processing")
-    ap.add_argument("--input",      required=True, help="Path to input Excel file (.xlsx/.xls)")
+    ap.add_argument("--input", required=True, help="Path to input Excel file (.xlsx/.xls)")
     ap.add_argument("--output_dir", required=True, help="Directory to write outputs")
     ap.add_argument(
         "--output_name",
@@ -707,7 +678,7 @@ def ensure_party_name_fallback(df: pd.DataFrame) -> pd.DataFrame:
         df["Party Name"] = df["Party Name1"]
 
     if "Party Name" in df.columns and "Party Name1" in df.columns:
-        party  = df["Party Name"].astype(str).replace("nan", "").str.strip()
+        party = df["Party Name"].astype(str).replace("nan", "").str.strip()
         party1 = df["Party Name1"].astype(str).replace("nan", "").str.strip()
         df["Party Name"] = np.where(party.eq("") | party.isna(), party1, df["Party Name"])
 
@@ -762,7 +733,7 @@ def find_header_row_in_sheet(excel_path: Path, sheet_name, required_cols: list) 
 
     required_norm = {normalize_colname(c) for c in required_cols}
 
-    best_row  = None
+    best_row = None
     best_score = -1
 
     for r in range(len(preview)):
@@ -772,7 +743,7 @@ def find_header_row_in_sheet(excel_path: Path, sheet_name, required_cols: list) 
         score = len(required_norm.intersection(row_norm))
         if score > best_score:
             best_score = score
-            best_row   = r
+            best_row = r
 
         if score == len(required_norm):
             return r
@@ -789,7 +760,7 @@ def find_header_row_in_sheet(excel_path: Path, sheet_name, required_cols: list) 
 
 
 def read_sheet_with_auto_header(excel_path: Path, required_cols: list):
-    xls           = pd.ExcelFile(excel_path)
+    xls = pd.ExcelFile(excel_path)
     sheet_to_read = xls.sheet_names[0]
     print("Sheets found in input file:", xls.sheet_names)
     print("Using sheet:", sheet_to_read)
@@ -822,7 +793,7 @@ def extract_month_year_from_period_text(text: str):
         return None, None
 
     mon = m.group(1)
-    yy  = m.group(2)
+    yy = m.group(2)
 
     if mon == "SEPT":
         mon = "SEP"
@@ -871,7 +842,7 @@ def get_gspread_client_readonly():
     except Exception as e:
         raise ValueError("GOOGLE_SA_JSON_B64 is not valid base64-encoded service account JSON") from e
     scopes = ["https://www.googleapis.com/auth/spreadsheets.readonly"]
-    creds  = Credentials.from_service_account_info(sa_info, scopes=scopes)
+    creds = Credentials.from_service_account_info(sa_info, scopes=scopes)
     return gspread.authorize(creds)
 
 
@@ -882,7 +853,7 @@ def get_gspread_client_write():
     except Exception as e:
         raise ValueError("GOOGLE_SA_JSON_B64 is not valid base64-encoded service account JSON") from e
     scopes = ["https://www.googleapis.com/auth/spreadsheets"]
-    creds  = Credentials.from_service_account_info(sa_info, scopes=scopes)
+    creds = Credentials.from_service_account_info(sa_info, scopes=scopes)
     return gspread.authorize(creds)
 
 
@@ -899,9 +870,9 @@ def load_mapping_from_gsheet() -> pd.DataFrame:
     if not values or len(values) < 2:
         raise ValueError(f"Google sheet tab '{tab_name}' seems empty or has no data rows.")
 
-    header    = [h.strip() for h in values[0]]
-    rows      = values[1:]
-    df_map    = pd.DataFrame(rows, columns=header)
+    header = [h.strip() for h in values[0]]
+    rows = values[1:]
+    df_map = pd.DataFrame(rows, columns=header)
 
     for c in ["Party Name", "Brand", "Party Name1"]:
         if c in df_map.columns:
@@ -923,9 +894,9 @@ def load_hsn_from_gsheet() -> pd.DataFrame:
     if not values or len(values) < 2:
         raise ValueError(f"Google sheet tab '{tab_name}' seems empty or has no data rows.")
 
-    header    = [str(h).strip() for h in values[0]]
-    rows      = values[1:]
-    df_hsn    = pd.DataFrame(rows, columns=header)
+    header = [str(h).strip() for h in values[0]]
+    rows = values[1:]
+    df_hsn = pd.DataFrame(rows, columns=header)
     df_hsn.columns = [str(c).strip() for c in df_hsn.columns]
 
     hsn_col = None
@@ -946,7 +917,7 @@ def load_hsn_from_gsheet() -> pd.DataFrame:
 
     out = df_hsn[[hsn_col, gst_col]].copy()
     out.columns = ["HSN", "GST_FROM_HSN"]
-    out["HSN"]          = out["HSN"].map(normalize_hsn)
+    out["HSN"] = out["HSN"].map(normalize_hsn)
     out["GST_FROM_HSN"] = out["GST_FROM_HSN"].map(parse_percent_to_decimal)
 
     out = (
@@ -973,9 +944,9 @@ def upsert_pivot_to_pay_stk_tab(df_pivot: pd.DataFrame, month, year):
     out_sheet_id = _get_env_str("PAY_STK_SHEET_ID")
     out_tab_name = _get_env_str("PAY_STK_TAB_NAME")
 
-    df_out          = df_pivot.copy()
+    df_out = df_pivot.copy()
     df_out["Month"] = df_out["Month"].astype(str).str.strip().str.upper()
-    df_out["Year"]  = pd.to_numeric(df_out["Year"], errors="coerce").astype("Int64")
+    df_out["Year"] = pd.to_numeric(df_out["Year"], errors="coerce").astype("Int64")
 
     gc = get_gspread_client_write()
     sh = gc.open_by_key(out_sheet_id)
@@ -989,7 +960,7 @@ def upsert_pivot_to_pay_stk_tab(df_pivot: pd.DataFrame, month, year):
         print(f"[PAY_STK] Sheet was empty. Written {len(df_out)} rows.")
         return
 
-    header    = [h.strip() for h in values[0]]
+    header = [h.strip() for h in values[0]]
     data_rows = values[1:]
 
     if not header or "Month" not in header or "Year" not in header:
@@ -1028,7 +999,7 @@ def add_prj_prefix_for_puma(df: pd.DataFrame) -> pd.DataFrame:
             df[c] = np.nan
 
     branch = df["Branch Name"].fillna("").astype(str).str.strip()
-    party  = df["Party Name"].fillna("").astype(str)
+    party = df["Party Name"].fillna("").astype(str)
     party1 = df["Party Name1"].fillna("").astype(str)
 
     mask = (
@@ -1040,11 +1011,11 @@ def add_prj_prefix_for_puma(df: pd.DataFrame) -> pd.DataFrame:
     )
 
     def prefix_prj(series: pd.Series) -> pd.Series:
-        s       = series.fillna("").astype(str)
+        s = series.fillna("").astype(str)
         already = s.str.upper().str.startswith("PRJ-")
         return np.where(already, s, "PRJ-" + s)
 
-    df.loc[mask, "Party Name"]  = prefix_prj(df.loc[mask, "Party Name"])
+    df.loc[mask, "Party Name"] = prefix_prj(df.loc[mask, "Party Name"])
     df.loc[mask, "Party Name1"] = prefix_prj(df.loc[mask, "Party Name1"])
     return df
 
@@ -1053,7 +1024,7 @@ def add_calculated_columns(df: pd.DataFrame, df_hsn: pd.DataFrame) -> pd.DataFra
     df = df.copy()
 
     df["Cost Rate"] = pd.to_numeric(df["Cost Rate"], errors="coerce")
-    df["Qty"]       = pd.to_numeric(df["Qty"], errors="coerce")
+    df["Qty"] = pd.to_numeric(df["Qty"], errors="coerce")
 
     if "Division" not in df.columns:
         raise ValueError("Missing required column in input: Division")
@@ -1061,7 +1032,7 @@ def add_calculated_columns(df: pd.DataFrame, df_hsn: pd.DataFrame) -> pd.DataFra
         raise ValueError("Missing required column in input: HSN")
 
     df["Division"] = df["Division"].astype(str).str.strip()
-    df["HSN"]      = df["HSN"].map(normalize_hsn)
+    df["HSN"] = df["HSN"].map(normalize_hsn)
 
     df["Total Cost"] = df["Cost Rate"] * df["Qty"]
 
@@ -1069,15 +1040,22 @@ def add_calculated_columns(df: pd.DataFrame, df_hsn: pd.DataFrame) -> pd.DataFra
 
     default_gst = np.where(df["Cost Rate"] <= 2500, 0.05, 0.18)
 
-    footwear_acc_mask = df["Division"].str.upper().eq("FOOTWEAR ACCESSORIES")
+    # Special logic: use GST from HSN master for both BAGS and FOOTWEAR ACCESSORIES
+    special_division_mask = (
+        df["Division"]
+        .astype(str)
+        .str.strip()
+        .str.upper()
+        .isin(["FOOTWEAR ACCESSORIES", "BAGS"])
+    )
 
     df["Gst%"] = np.where(
-        footwear_acc_mask & df["GST_FROM_HSN"].notna(),
+        special_division_mask & df["GST_FROM_HSN"].notna(),
         df["GST_FROM_HSN"],
         default_gst,
     )
 
-    df["Gst"]         = df["Total Cost"] * df["Gst%"]
+    df["Gst"] = df["Total Cost"] * df["Gst%"]
     df["Actual Cost"] = df["Total Cost"] + df["Gst"]
 
     return df
@@ -1097,7 +1075,7 @@ def create_pay_stk_pivot(df: pd.DataFrame, month, year) -> pd.DataFrame:
         margins=False,
     ).reset_index()
 
-    pivot.insert(0, "Year",  year)
+    pivot.insert(0, "Year", year)
     pivot.insert(0, "Month", month)
 
     return pivot
@@ -1142,6 +1120,7 @@ def main():
 
     month, year = find_month_year_in_sheet(input_path, sheet_used)
     print("Detected Month/Year from Period:", month, year)
+
     # ✅ Signal data period to server.js for Drive folder naming
     if month and year:
         print(f"PERIOD: {month}-{year}")
@@ -1184,8 +1163,8 @@ def main():
     df_base.drop(columns=["Party Name1_map"], inplace=True)
 
     # Business logic
-    df_base  = add_prj_prefix_for_puma(df_base)
-    df_base  = add_calculated_columns(df_base, df_hsn)
+    df_base = add_prj_prefix_for_puma(df_base)
+    df_base = add_calculated_columns(df_base, df_hsn)
     df_pivot = create_pay_stk_pivot(df_base, month, year)
 
     # Upsert pivot to PAY_STK Google Sheet tab
@@ -1193,7 +1172,7 @@ def main():
 
     # Write local Excel output
     with pd.ExcelWriter(str(output_file), engine="openpyxl") as writer:
-        df_base.to_excel(writer,  sheet_name=BASE_SHEET_NAME_OUT,  index=False)
+        df_base.to_excel(writer, sheet_name=BASE_SHEET_NAME_OUT, index=False)
         df_pivot.to_excel(writer, sheet_name=PIVOT_SHEET_NAME_OUT, index=False)
 
     print(f"Done. Output written to: {output_file}")

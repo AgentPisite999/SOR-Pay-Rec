@@ -14,7 +14,7 @@
 # import gspread
 # from google.oauth2.service_account import Credentials
 
-# # ===================== FIX: FORCE UTF-8 PRINTING (prevents ✅/❌ crash on Windows) =====================
+# # ===================== FIX: FORCE UTF-8 PRINTING (prevents crash on Windows) =====================
 # try:
 #     sys.stdout.reconfigure(encoding="utf-8")
 #     sys.stderr.reconfigure(encoding="utf-8")
@@ -89,9 +89,6 @@
 
 
 # def build_canon_map(columns):
-#     """
-#     Canonical -> actual. If duplicates exist, LAST one wins.
-#     """
 #     m = {}
 #     for col in columns:
 #         m[canon(col)] = col
@@ -871,6 +868,10 @@
 #     month = (args.month or "").strip().upper()
 #     year = (args.year or "").strip()
 
+#     # ✅ Signal data period to server.js for Drive folder naming
+#     if month and year:
+#         print(f"PERIOD: {month}-{year}")
+
 #     if not input_dir.exists():
 #         raise FileNotFoundError(f"Input folder not found: {input_dir}")
 
@@ -932,7 +933,7 @@
 #                         processed_dfs_for_pivot.append(df)
 
 #             except Exception as e:
-#                 print(f"❌ Failed on {excel_path.name}: {e}")
+#                 print(f"Failed on {excel_path.name}: {e}")
 
 #         raw_df, pivot_df = build_receivable_raw_and_pivot(processed_dfs_for_pivot)
 
@@ -943,7 +944,7 @@
 #         pivot_df.to_excel(writer, sheet_name=PIVOT_SHEET_NAME, index=False)
 
 #     print("")
-#     print("✅ Done. Master Excel created at:")
+#     print("Done. Master Excel created at:")
 #     print(str(output_file))
 #     print(f"Tabs written: {tabs_written}")
 #     print(f"Receivable_Raw rows: {len(raw_df)}")
@@ -962,7 +963,7 @@
 #             f"using Year+Month+Partner Name (Month={month}, Year={year}) ..."
 #         )
 #         upsert_append_by_month_year_partner(target_sheet_id, target_tab_name, pivot_df, month, year)
-#         print("✅ Final_Rec Google Sheet update done.")
+#         print("Final_Rec Google Sheet update done.")
 
 #     # -------------------- PUSH Receivable_Raw --------------------
 #     base_sheet_id = env_clean(os.getenv("REC_TD_BASE_SHEET_ID", ""))
@@ -976,7 +977,7 @@
 #             f"using batch replace by Year+Month (Month={month}, Year={year}) ..."
 #         )
 #         replace_batch_by_month_year(base_sheet_id, base_tab_name, raw_df, month, year)
-#         print("✅ Receivable_Raw Google Sheet update done.")
+#         print("Receivable_Raw Google Sheet update done.")
 
 
 # if __name__ == "__main__":
@@ -1565,6 +1566,43 @@ def process_sales(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
+# -------------------- MYNTRA GST OVERRIDE --------------------
+# Lookup table: (remarks.lower(), gst.lower()) -> thresholds
+# pay_billing  : threshold for GST Payable (Billing Cost) %
+# reimb_billing: threshold for GST Reimbursement (Billing Cost) %
+# pay_payment  : threshold for GST Payable (Payment) %
+# GST Reimbursement (Payment) % is always copied from GST Reimbursement (Billing Cost) %
+#
+# Threshold meanings (same as get_gst_rates_from_threshold):
+#   1000  -> low=12%, high=18%
+#   2500  -> low=5%,  high=18%
+#   2625  -> low=5%,  high=18%
+
+MYNTRA_GST_RULES = {
+    ("dn-c",  "new"): {"pay_billing": 1000, "reimb_billing": 1000, "pay_payment": 2625},
+    ("dn-tax","new"): {"pay_billing": 2625, "reimb_billing": 2500, "pay_payment": 2625},
+    ("dn-tax","old"): {"pay_billing": 1000, "reimb_billing": 1000, "pay_payment": 2625},
+}
+
+# Normalised key for Myntra partner matching
+_MYNTRA_KEY = normalize_partner("Myntra jabong")
+
+
+def _get_myntra_thresholds(remarks_series: pd.Series, gst_series: pd.Series) -> pd.DataFrame:
+    """
+    Returns a DataFrame aligned to the input index with columns:
+        pay_billing, reimb_billing, pay_payment
+    Falls back to DN-C / New rule if combination is not recognised.
+    """
+    default_rule = MYNTRA_GST_RULES[("dn-c", "new")]
+    rows = []
+    for r, g in zip(remarks_series, gst_series):
+        key = (str(r).strip().lower(), str(g).strip().lower())
+        rule = MYNTRA_GST_RULES.get(key, default_rule)
+        rows.append(rule)
+    return pd.DataFrame(rows, index=remarks_series.index)
+
+
 # -------------------- 2) BILLING COST --------------------
 BILL_REQUIRED = ["gross sales (sales)", "qty (sales)", "partner name"]
 
@@ -1585,6 +1623,10 @@ def process_billing_cost(df: pd.DataFrame, margin_billing_map: dict, gst_billing
     nz = qty_sales != 0
     mrp_rate[nz] = gross_sales[nz] / qty_sales[nz]
 
+    # --- Determine which rows are Myntra ---
+    is_myntra = partner_key == _MYNTRA_KEY
+
+    # --- Default threshold lookup from Google Sheets (all partners) ---
     thresh_obj = partner_key.map(lambda k: gst_billing_threshold_map.get(k, {}))
     pay_thresh = thresh_obj.map(lambda d: d.get("payBillingThresh", 0.0)).astype(float)
     reimb_thresh = thresh_obj.map(lambda d: d.get("reimbBillingThresh", 0.0)).astype(float)
@@ -1592,8 +1634,25 @@ def process_billing_cost(df: pd.DataFrame, margin_billing_map: dict, gst_billing
     pay_thresh = pay_thresh.where(pay_thresh != 0, 1000.0)
     reimb_thresh = reimb_thresh.where(reimb_thresh != 0, pay_thresh)
 
+    # --- Myntra override: replace thresholds row-by-row from MYNTRA_GST_RULES ---
+    if is_myntra.any():
+        remarks_col = col_map.get("remarks") or col_map.get("remark")
+        gst_col = col_map.get("gst")
+
+        remarks_s = df[remarks_col].fillna("") if remarks_col else pd.Series("", index=df.index)
+        gst_s = df[gst_col].fillna("") if gst_col else pd.Series("", index=df.index)
+
+        myntra_thresh_df = _get_myntra_thresholds(remarks_s, gst_s)
+
+        pay_thresh = pay_thresh.copy()
+        reimb_thresh = reimb_thresh.copy()
+        pay_thresh[is_myntra] = myntra_thresh_df.loc[is_myntra, "pay_billing"].values
+        reimb_thresh[is_myntra] = myntra_thresh_df.loc[is_myntra, "reimb_billing"].values
+
+    # --- GST % from threshold (standard logic) ---
     pay_low = pay_thresh.map(lambda t: get_gst_rates_from_threshold(float(t))["low"])
     pay_high = pay_thresh.map(lambda t: get_gst_rates_from_threshold(float(t))["high"])
+
     gst_pay_perc = pd.Series(
         [low if rate <= thr else high for rate, thr, low, high in zip(mrp_rate, pay_thresh, pay_low, pay_high)],
         index=df.index,
@@ -1605,6 +1664,7 @@ def process_billing_cost(df: pd.DataFrame, margin_billing_map: dict, gst_billing
 
     reimb_low = reimb_thresh.map(lambda t: get_gst_rates_from_threshold(float(t))["low"])
     reimb_high = reimb_thresh.map(lambda t: get_gst_rates_from_threshold(float(t))["high"])
+
     gst_reimb_perc = pd.Series(
         [low if b <= thr else high for b, thr, low, high in zip(basic_rate, reimb_thresh, reimb_low, reimb_high)],
         index=df.index,
@@ -1647,6 +1707,7 @@ def process_payment_working(df: pd.DataFrame, margin_payment_map: dict, gst_paym
     partner_series = df[col_map["partner name"]].fillna("")
     partner_key = partner_series.map(normalize_partner)
 
+    # For Myntra: GST Reimb (Payment) % = GST Reimb (Billing) % — already computed upstream
     billing_reimb_val = to_num(df[col_map["gst reimbursement (billing cost )"]])
     billing_reimb_perc = to_num(df[col_map["gst reimbursement (billing cost ) %"]])
 
@@ -1656,12 +1717,31 @@ def process_payment_working(df: pd.DataFrame, margin_payment_map: dict, gst_paym
     nz = qty_sales != 0
     mrp_rate_pay[nz] = net_sales[nz] / qty_sales[nz]
 
+    # --- Determine which rows are Myntra ---
+    is_myntra = partner_key == _MYNTRA_KEY
+
+    # --- Default threshold lookup from Google Sheets (all partners) ---
     thresh_obj = partner_key.map(lambda k: gst_payment_threshold_map.get(k, {}))
     pay_thresh = thresh_obj.map(lambda d: d.get("payPayThresh", 0.0)).astype(float)
     pay_thresh = pay_thresh.where(pay_thresh != 0, 2625.0)
 
+    # --- Myntra override: replace pay_payment threshold row-by-row ---
+    if is_myntra.any():
+        remarks_col = col_map.get("remarks") or col_map.get("remark")
+        gst_col = col_map.get("gst")
+
+        remarks_s = df[remarks_col].fillna("") if remarks_col else pd.Series("", index=df.index)
+        gst_s = df[gst_col].fillna("") if gst_col else pd.Series("", index=df.index)
+
+        myntra_thresh_df = _get_myntra_thresholds(remarks_s, gst_s)
+
+        pay_thresh = pay_thresh.copy()
+        pay_thresh[is_myntra] = myntra_thresh_df.loc[is_myntra, "pay_payment"].values
+
+    # --- GST Payable (Payment) % from threshold ---
     pay_low = pay_thresh.map(lambda t: get_gst_rates_from_threshold(float(t))["low"])
     pay_high = pay_thresh.map(lambda t: get_gst_rates_from_threshold(float(t))["high"])
+
     gst_pay_perc = pd.Series(
         [low if rate <= thr else high for rate, thr, low, high in zip(mrp_rate_pay, pay_thresh, pay_low, pay_high)],
         index=df.index,
@@ -1671,6 +1751,8 @@ def process_payment_working(df: pd.DataFrame, margin_payment_map: dict, gst_paym
     gst_pay_value = (mrp_rate_pay * gst_pay_perc / (gst_pay_perc + 1)).fillna(0)
     basic_rate = mrp_rate_pay - margin_value - gst_pay_value
 
+    # GST Reimbursement (Payment) % = same as Billing Reimbursement % for ALL partners
+    # (This was already the case in original code; Myntra rule simply confirms it.)
     gst_reimb_perc = billing_reimb_perc
     basic_val = basic_rate * qty_sales
     gst_reimb_val = billing_reimb_val

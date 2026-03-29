@@ -5,6 +5,7 @@
 // window.__job = window.__job || { id: null, agent: null };
 // window.__pollTimer = window.__pollTimer || null;
 // window.__consoleRunning = window.__consoleRunning || false;
+// window.toast = window.toast || function(msg){ try { console.log(msg); } catch(e) {} };
 
 // window.toast = window.toast || function (msg, type) {
 //   var el = document.getElementById("toast");
@@ -41,6 +42,82 @@
 //     window.__pollTimer = null;
 //   }
 // }
+
+// window.resetConsoleUI = function () {
+//   if (window.__job && window.__job.id) {
+//     window.toast && window.toast("Agent is running", "err");
+//     return;
+//   }
+
+//   stopPolling();
+//   window.__job = { id: null, agent: null };
+//   window.__consoleRunning = false;
+
+//   var g = function (id) { return document.getElementById(id); };
+
+//   var lc = g("logContent");
+//   if (lc) lc.textContent = "";
+
+//   var ol = g("outList");
+//   if (ol) ol.innerHTML = '<div class="outputs-empty">— No outputs yet —</div>';
+
+//   try {
+//     var fi = g("files");
+//     if (fi) fi.value = "";
+//   } catch (e) {}
+
+//   var fz = g("fileZone");
+//   if (fz) {
+//     fz.classList.remove("has-files");
+//     fz.classList.remove("locked");
+//   }
+
+//   var fs = g("fileStatus");
+//   if (fs) fs.textContent = "";
+
+//   var sel = g("agentSelect");
+//   if (sel) sel.value = "";
+
+//   var month = g("month");
+//   if (month) month.value = "";
+
+//   var year = g("year");
+//   if (year) year.value = "";
+
+//   var pm = g("pillMode");
+//   if (pm) pm.textContent = "MODE: —";
+
+//   var po = g("pillOutput");
+//   if (po) po.textContent = "OUT: —";
+
+//   var myb = g("monthYearBox");
+//   if (myb) myb.classList.add("hidden");
+
+//   var pct = g("progressPct");
+//   if (pct) pct.textContent = "0%";
+
+//   var fill = g("progressFill");
+//   if (fill) fill.style.width = "0%";
+
+//   var hint = g("progressHint");
+//   if (hint) hint.textContent = "Idle";
+
+//   var ov = g("consoleLock");
+//   if (ov) {
+//     ov.classList.remove("show");
+//     ov.setAttribute("aria-hidden", "true");
+//   }
+
+//   ["agentSelect", "files", "month", "year", "btnClear", "btnClearAll"].forEach(function (id) {
+//     var el = g(id);
+//     if (el) el.disabled = false;
+//   });
+
+//   var runBtn = g("btnRun");
+//   if (runBtn) runBtn.disabled = true;
+
+//   window.toast && window.toast("Console reset");
+// };
 
 // // ═══════════════════════════════════════════════════════════════
 // window.__sectionInit.console = function () {
@@ -115,13 +192,16 @@
 //   function lockAll() {
 //     window.__consoleRunning = true;
 
-//     ["agentSelect", "files", "month", "year", "btnClear", "btnClearAll"].forEach(function (id) {
+//     ["agentSelect", "files", "month", "year", "btnClear"].forEach(function (id) {
 //       var e = g(id);
 //       if (e) e.disabled = true;
 //     });
 
 //     var bRun = g("btnRun");
 //     if (bRun) bRun.disabled = true;
+
+//     var bReset = g("btnClearAll");
+//     if (bReset) bReset.disabled = false;
 
 //     var fz = g("fileZone");
 //     if (fz) fz.classList.add("locked");
@@ -135,10 +215,16 @@
 //     window.__job = { id: null, agent: null };
 //     window.__consoleRunning = false;
 
-//     ["agentSelect", "files", "month", "year", "btnClear", "btnClearAll"].forEach(function (id) {
+//     ["agentSelect", "files", "month", "year", "btnClear"].forEach(function (id) {
 //       var e = g(id);
 //       if (e) e.disabled = false;
 //     });
+
+//     var bRun = g("btnRun");
+//     if (bRun) bRun.disabled = false;
+
+//     var bReset = g("btnClearAll");
+//     if (bReset) bReset.disabled = false;
 
 //     var fz = g("fileZone");
 //     if (fz) fz.classList.remove("locked");
@@ -599,43 +685,6 @@
 //     };
 //   }
 
-//   var bReset = g("btnClearAll");
-//   if (bReset) {
-//     bReset.onclick = function () {
-//       if (window.__job.id) {
-//         window.toast("Agent is running", "err");
-//         return;
-//       }
-
-//       var lc = g("logContent");
-//       if (lc) lc.textContent = "";
-
-//       var ol = g("outList");
-//       if (ol) ol.innerHTML = '<div class="outputs-empty">— No outputs yet —</div>';
-
-//       setProgress(0, "Idle");
-
-//       try {
-//         var fi = g("files");
-//         if (fi) fi.value = "";
-//       } catch (e) {}
-
-//       var fz = g("fileZone");
-//       if (fz) fz.classList.remove("has-files");
-
-//       var fs = g("fileStatus");
-//       if (fs) fs.textContent = "";
-
-//       var sel = g("agentSelect");
-//       if (sel) sel.value = "";
-
-//       applyAgent("");
-//       finished = true;
-//       unlockAll();
-//       window.toast("Console reset");
-//     };
-//   }
-
 //   var agSel = g("agentSelect");
 //   if (agSel) {
 //     agSel.onchange = function () {
@@ -678,10 +727,6 @@
 
 //   loadAgents();
 // };
-
-
-
-
 
 // FILE: public/js/app.js
 
@@ -1097,8 +1142,9 @@ window.__sectionInit.console = function () {
     }, 1500);
   }
 
+  // ✅ UPDATED: dynamic check using PROJECTS config instead of hardcoded names
   function needsMY(name) {
-    return name === "Receivable Stock" || name === "Receivable Trade Discount";
+    return !!(PROJECTS[name] && PROJECTS[name].needsMonthYear);
   }
 
   function applyAgent(name) {

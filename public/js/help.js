@@ -7,9 +7,11 @@
     REC_STK:  "Receivable Stock",
     REC_TD:   "Receivable Trade Discount",
     PRI_SALE: "Primary Sale",
+    GRC:      "GRC & Movement",
   };
 
-  var CARDS = [
+  // Default cards for standard agents (master + format + process)
+  var CARDS_DEFAULT = [
     {
       type:  "master",
       icon:  "🗂️",
@@ -35,6 +37,43 @@
       key:   "process",
     },
   ];
+
+  // GRC + Movement: 3 cards — Input Format + GRC Process Doc + Movement Logic Doc
+  var CARDS_GRC_MOVEMENT = [
+    {
+      type:  "format",
+      icon:  "📋",
+      title: "Download Input Format",
+      desc:  "Download the blank Excel template with the correct headers and column structure for the GRC Purchase Register upload.",
+      label: "Download Template",
+      key:   "format",
+    },
+    {
+      type:  "process",
+      icon:  "📖",
+      title: "GRC Agent — Process Document",
+      desc:  "Step-by-step SOP for preparing the GRC Purchase Register file, running the agent, verifying outputs and resolving common errors.",
+      label: "Open GRC Process Doc",
+      key:   "process",
+    },
+    {
+      type:  "process2",
+      icon:  "📈",
+      title: "Movement Matrix — Logic Document",
+      desc:  "Detailed logic document covering all rows of the Secondary Movement Matrix — data sources, formulas, and calculation steps for Basic Value and Qty.",
+      label: "Open Movement Doc",
+      key:   "process2",
+    },
+  ];
+
+  var CARD_CONFIG = {
+    PAY_STK:  CARDS_DEFAULT,
+    PAY_TD:   CARDS_DEFAULT,
+    REC_STK:  CARDS_DEFAULT,
+    REC_TD:   CARDS_DEFAULT,
+    PRI_SALE: CARDS_DEFAULT,
+    GRC:      CARDS_GRC_MOVEMENT,
+  };
 
   var SVG_ARROW =
     '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" ' +
@@ -73,8 +112,11 @@
     if (!grid) return;
     if (label) label.textContent = "Resources — " + (AGENT_NAMES[agentKey] || agentKey);
     grid.innerHTML = "";
+
+    var cards = CARD_CONFIG[agentKey] || CARDS_DEFAULT;
     var agentLinks = _links && _links[agentKey] ? _links[agentKey] : {};
-    CARDS.forEach(function (def, i) {
+
+    cards.forEach(function (def, i) {
       grid.appendChild(makeCard(def, agentLinks[def.key] || "", i));
     });
   }
@@ -112,11 +154,9 @@
       });
   }
 
-  // Register for sections.js — called after HTML is injected
   window.__sectionInit = window.__sectionInit || {};
   window.__sectionInit.help = initHelp;
 
-  // Auto-init if DOM already has the help section (e.g. navigating back)
   if (document.getElementById("helpAgentSelector")) {
     initHelp();
   }
