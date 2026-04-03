@@ -1752,10 +1752,22 @@ def process_payment_working(df: pd.DataFrame, margin_payment_map: dict, gst_paym
     basic_rate = mrp_rate_pay - margin_value - gst_pay_value
 
     # GST Reimbursement (Payment) % = same as Billing Reimbursement % for ALL partners
-    # (This was already the case in original code; Myntra rule simply confirms it.)
     gst_reimb_perc = billing_reimb_perc
     basic_val = basic_rate * qty_sales
-    gst_reimb_val = billing_reimb_val
+    # GST Reimbursement (Payment) value:
+    #   Myntra DN-C  → copy Billing GST Reimb value directly
+    #   Myntra DN-Tax → recalculate: Payment Basic Value × Billing Reimb %
+    #   Others        → recalculate: Payment Basic Value × Billing Reimb %
+    gst_reimb_val = basic_val * gst_reimb_perc  # default: recalculate for all
+
+    if is_myntra.any():
+        remarks_col = col_map.get("remarks") or col_map.get("remark")
+        remarks_s = df[remarks_col].fillna("") if remarks_col else pd.Series("", index=df.index)
+        is_dnc = is_myntra & remarks_s.str.strip().str.lower().eq("dn-c")
+        if is_dnc.any():
+            gst_reimb_val = gst_reimb_val.copy()
+            gst_reimb_val[is_dnc] = billing_reimb_val[is_dnc]
+
     bill_val = basic_val + gst_reimb_val
 
     df["Margin (Payment ) %"] = margin_perc.round(4)

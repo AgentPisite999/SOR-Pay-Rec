@@ -1667,21 +1667,27 @@ app.get("/api/basedump/debug", requireAuth, async (req, res) => {
 // -------------------------
 const DASHBOARD_PARTNER_MAP = [
   { patterns: ["shoppers stop ltd", "shoppers stop", "shoppers", "shopper"], key: "Shoppers" },
-  { patterns: ["lifestyle international pvt", "lifestyle international", "lifestyle"], key: "Lifestyle" },
+  { patterns: ["lifestyle international pvt", "lifestyle international", "lifestyle", "ls"], key: "Lifestyle" },
   { patterns: ["v retail ltd", "v retail", "v-retail", "v - retail"], key: "V Retail" },
   { patterns: ["sabharwals nirankar venture", "sabharwal nirankar venture", "sabharwal nirankar", "nirankar venture", "nirankar"], key: "Sabharwal Nirankar" },
-  { patterns: ["rrl-centro", "rrl centro", "reliance retail ltd (rrl-centro)", "reliance centro", "relience centro", "centro"], key: "Reliance Centro" },
   { patterns: ["kora retail private", "kora retail", "kora retails", "kora"], key: "Kora Retail" },
   { patterns: ["leayan global pvt", "leayan global", "leayan", "zuup"], key: "Leayan_Zuup" },
   { patterns: ["myntra jabong india pvt", "myntra jabong india", "myntra jabong", "myntra"], key: "Myntra" },
   { patterns: ["flipkart india pvt", "flipkart india", "flipkart"], key: "Flipkart" },
+  // Ajio MUST come before Centro
   { patterns: ["reliance retail ltd ajio sor", "reliance retail ltd_ajio sor", "reliance retail ajio sor", "reliance retail ajio", "ajio sor", "ajio"], key: "Reliance Ajio" },
+  { patterns: ["rrl-centro", "rrl centro", "reliance retail ltd (rrl-centro)", "reliance centro", "relience centro", "centro"], key: "Reliance Centro" },
 ];
 
 function normPartner(name) {
   const s = String(name || "").toLowerCase().replace(/[-_]+/g, " ").trim();
   for (const entry of DASHBOARD_PARTNER_MAP) {
-    if (entry.patterns.some(p => s.includes(p))) return entry.key;
+    if (entry.patterns.some(p => {
+      // Short patterns (≤3 chars) → exact match only to avoid substring collisions
+      // e.g. "ls" should match "ls" but NOT "sabharwals"
+      if (p.length <= 3) return s === p;
+      return s.includes(p);
+    })) return entry.key;
   }
   return null;
 }
@@ -1706,6 +1712,22 @@ function calcMatrix(recStkRows, recTdRows, grcRows, primRows, M, Y) {
     "Myntra", "Flipkart", "Reliance Ajio",
   ];
 
+  // Allowed groups for Primary calculation (SIS Customer + Online SOR)
+  const ALLOWED_GROUPS = ["sis customer", "online sor"];
+
+  // Fill down the "Groups" column — Excel merged-cell pattern
+  // Only the first row of each group has the value, rest are empty
+  let lastGroup = "";
+  primRows.forEach(r => {
+    const grpKey = Object.keys(r).find(k => k.trim() === "Groups") || "Groups";
+    const val = String(r[grpKey] || "").trim();
+    if (val) {
+      lastGroup = val;
+    } else {
+      r[grpKey] = lastGroup;
+    }
+  });
+
   function toNum(v) {
     const n = parseFloat(String(v || "").replace(/,/g, ""));
     return isNaN(n) ? 0 : n;
@@ -1721,8 +1743,8 @@ function calcMatrix(recStkRows, recTdRows, grcRows, primRows, M, Y) {
     });
   }
 
-  // Sum rows from PRIM_SALE — only SIS Customer group rows (not RTV/return rows)
-  // "Groups" column = "SIS Customer" identifies the main sale rows
+  // Sum rows from PRIM_SALE — only SIS Customer / Online SOR groups
+  // Excludes: Online Outright, Online MP, Export Customer, Acc Customer, Scrap
   // Flexible column matching — trims whitespace from keys
   function sumRows(rows, monthCol, yearCol, partnerCol, targetMonth, targetYear, targetPartnerKey, valueCol) {
     const getVal = (r, col) => {
@@ -1734,13 +1756,14 @@ function calcMatrix(recStkRows, recTdRows, grcRows, primRows, M, Y) {
     const matched = rows.filter(r => {
       const m = getVal(r, monthCol).toUpperCase();
       const y = getVal(r, yearCol);
-      const p = normPartner(getVal(r, partnerCol));
+      const custName = getVal(r, partnerCol);
+      const p = normPartner(custName);
 
-      // Only include SIS Customer group rows (main sale, not RTV/return rows)
+      // Only include allowed groups (SIS Customer + Online SOR)
       const grp = getVal(r, "Groups").toLowerCase();
-      const isSIS = grp === "sis customer";
+      const isAllowed = ALLOWED_GROUPS.includes(grp);
 
-      return m === targetMonth.toUpperCase() && y === targetYear && p === targetPartnerKey && isSIS;
+      return m === targetMonth.toUpperCase() && y === targetYear && p === targetPartnerKey && isAllowed;
     });
 
     return matched.reduce((acc, r) => {
@@ -1792,9 +1815,10 @@ function calcMatrix(recStkRows, recTdRows, grcRows, primRows, M, Y) {
     //    (calculated separately and injected after prev month calc)
     bv.opening_sec_diff[pKey] = 0; // placeholder, overwritten below
 
-    // 3. Primary → PRIM_SALE sum of Net col for ALL matching rows
-    // Primary → PRIM_SALE sum of Net col (try "Net" and "Net " with trailing space)
-    const primNetCol = primRows.length > 0 && (Object.keys(primRows[0]).find(k => k === "Net") || Object.keys(primRows[0]).find(k => k.replace(/_\d+$/,"") === "Net")) || "Net";
+    // 3. Primary → PRIM_SALE sum of 3rd Net column (Net_2) — the final net value
+    const primNetCol = primRows.length > 0
+      ? (Object.keys(primRows[0]).find(k => k === "Net_2") || Object.keys(primRows[0]).find(k => k === "Net_1") || "Net")
+      : "Net_2";
     bv.primary[pKey] = sumRows(primRows, "Month", "Year", "Customer Name", M, Y, pKey, primNetCol);
 
     // 4. Rate Difference_Sales → GRC Sum of NET_AMOUNT
@@ -1853,9 +1877,10 @@ function calcMatrix(recStkRows, recTdRows, grcRows, primRows, M, Y) {
     // 2. Opening Secondary Difference → placeholder
     qty.opening_sec_diff[pKey] = 0;
 
-    // 3. Primary → PRIM_SALE sum of Qty. col for ALL matching rows
-    // Primary Qty → PRIM_SALE sum of Qty. col
-    const primQtyCol = primRows.length > 0 && (Object.keys(primRows[0]).find(k => k === "Qty.") || Object.keys(primRows[0]).find(k => k.replace(/_\d+$/,"") === "Qty.")) || "Qty.";
+    // 3. Primary → PRIM_SALE sum of 3rd Qty column (Qty._2) — the final qty value
+    const primQtyCol = primRows.length > 0
+      ? (Object.keys(primRows[0]).find(k => k === "Qty._2") || Object.keys(primRows[0]).find(k => k === "Qty._1") || "Qty.")
+      : "Qty._2";
     qty.primary[pKey] = sumRows(primRows, "Month", "Year", "Customer Name", M, Y, pKey, primQtyCol);
 
     // 4. Rate Difference → GRC Sum of Purchase Qty & Purchase Return Qty
